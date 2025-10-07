@@ -1,0 +1,14 @@
+name: paroquant
+channels:
+  - defaults
+dependencies:
+  - python=3.11
+  - pip=25.2
+  - pip:
+      - accelerate==1.7.0
+      - datasets==3.6.0
+      - torch==2.8.0
+      - torchvision==0.23.0
+      - transformers==4.55.2
+      - zstandard==0.23.0
+      - simple_parsing==0.1.7
