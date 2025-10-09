@@ -102,18 +102,8 @@ def optimize_module(
     train_input_batches, train_output_batches = train_set_batches
     val_input_batches, val_output_batches = val_set_batches
 
-    lr_schedulers = []
-    t_max = n_iter * len(train_input_batches)
-    for param_group in optim_params:
-        optimizer = torch.optim.AdamW([{k: v for k, v in param_group.items()}])
-        scheduler = CosineAnnealingLR(
-            optimizer,
-            T_max=t_max,
-            eta_min=param_group["lr"] / 20,
-        )
-        lr_schedulers.append(scheduler)
-
     optimizer = torch.optim.AdamW(optim_params)
+    scheduler = CosineAnnealingLR(optimizer, T_max=n_iter * len(train_input_batches))
     scaler = torch.amp.GradScaler()
     if loss_fn == "mse":
         loss = nn.MSELoss()
@@ -162,10 +152,7 @@ def optimize_module(
             scaler.scale(loss_value).backward()
             scaler.step(optimizer)
             scaler.update()
-
-            for i, scheduler in enumerate(lr_schedulers):
-                scheduler.step()
-                optimizer.param_groups[i]["lr"] = scheduler.get_lr()[0]
+            scheduler.step()
 
             if post_optim_callback:
                 post_optim_callback(module)

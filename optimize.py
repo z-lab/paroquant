@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from tqdm import tqdm
 from pathlib import Path
 import json
-from typing import Optional, Literal
+from typing import Literal
 import sys
 
 sys.path.append(Path(__file__).parent.as_posix())
@@ -75,10 +75,6 @@ class Config:
 
     # Directory to save state dicts of optimized linear layers.
     output_dir: str
-    # Directory to save the real-quantized model.
-    real_quant_dir: Optional[str] = None
-    # Directory to save the fake-quantized model.
-    fake_quant_dir: Optional[str] = None
 
     # Whether to resume from previously saved results in `output_dir`.
     resume: bool = False
@@ -94,8 +90,8 @@ def main():
     )
     print(args)
 
-    model_name = args.model.split("/")[-1]
     # Store the results in a subdirectory.
+    model_name = args.model.split("/")[-1]
     output_dir = Path(args.output_dir)
     output_dir = output_dir / model_name
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -395,8 +391,6 @@ def main():
             )
 
         layer.cpu()
-
-    # TODO: Save fake-quantized or real-quantized model.
 
 
 if __name__ == "__main__":
