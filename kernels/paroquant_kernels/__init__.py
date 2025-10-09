@@ -1,3 +1,5 @@
+# Copyright (c) 2025, Haisheng Chen.
+
 import torch
 import _C
 
