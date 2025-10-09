@@ -1,0 +1,7 @@
+accelerate==1.7.0
+datasets==3.6.0
+torch==2.8.0
+torchvision==0.23.0
+transformers==4.55.2
+simple_parsing==0.1.7
+zstandard==0.23.0
