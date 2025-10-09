@@ -3,7 +3,6 @@ import torch.nn as nn
 import simple_parsing
 from dataclasses import dataclass
 from tqdm import tqdm
-from copy import deepcopy
 from pathlib import Path
 import json
 from typing import Optional, Literal
@@ -41,7 +40,7 @@ class Config:
     # Huggingface model path.
     model: str
     # The parameters to optimize at each stage and the corresponding learning rates,
-    # e.g., --params-to-optimize "channel_scales:0.05,angles:0.05" "weight:1e-5,quantizer:1e-6"
+    # e.g., --params "channel_scales:0.05,angles:0.05" "weight:1e-5,quantizer:1e-6"
     params: list[str]
     # The number of epochs for each stage of optimization,
     # e.g., --epochs 10 10
@@ -75,7 +74,7 @@ class Config:
     cache_shards: int = 1
 
     # Directory to save state dicts of optimized linear layers.
-    output_dir: Optional[str] = None
+    output_dir: str
     # Directory to save the real-quantized model.
     real_quant_dir: Optional[str] = None
     # Directory to save the fake-quantized model.
@@ -259,12 +258,11 @@ def main():
 
             old_module.to(device)
 
-            assert args.num_rotations is not None
             num_pairs_factor = 0.5
             weight = old_module.weight.float()
-            weight_grouped = weight.view(
-                weight.shape[0], -1, args.group_size
-            ).permute(1, 0, 2)
+            weight_grouped = weight.view(weight.shape[0], -1, args.group_size).permute(
+                1, 0, 2
+            )
 
             all_pairs = get_random_rotation_pairs(
                 weight_grouped,
