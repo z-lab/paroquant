@@ -244,12 +244,6 @@ TORCH_LIBRARY(rotation, m) {
     m.def("rotate(Tensor x, Tensor idx_ij, Tensor theta, Tensor? scales=None) -> Tensor");
 }
 
-
 TORCH_LIBRARY_IMPL(rotation, CUDA, m) {
     m.impl("rotate", &rotate_dynamic);
-}
-
-PYBIND11_MODULE(TORCH_EXTENSION_NAME, m)
-{
-    m.def("rot_k8g128h", &rotate_k8g128half_launcher, "Fast Givens Transform CUDA extension");
 }

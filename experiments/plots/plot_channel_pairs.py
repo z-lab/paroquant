@@ -5,7 +5,7 @@ from pathlib import Path
 from argparse import ArgumentParser
 import sys
 
-from fast_givens_transform import fast_givens_transform
+from paroquant_kernels import scaled_pairwise_rotation
 from quant.model import KPseudoQuantizedLinear
 from quant.optimize import _get_sorted_sensitive_channel_pairs
 
@@ -43,7 +43,7 @@ weight = qlinear.weight.detach()
 print("Calculating original and rotated weights...")
 weight_r = qlinear.weight.detach()
 weight_r = weight_r * qlinear.channel_scales
-weight_r = fast_givens_transform(
+weight_r = scaled_pairwise_rotation(
     weight_r, qlinear.pairs_grouped, qlinear.angles_grouped
 )
 

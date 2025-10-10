@@ -6,7 +6,7 @@ from torch.utils.checkpoint import checkpoint
 from .util import get_named_linears
 from .quantizer import UniformAffineQuantizer
 
-from paroquant_kernels import fast_givens_transform
+from paroquant_kernels import scaled_pairwise_rotation
 
 
 class PseudoQuantizedLinear(nn.Module):
@@ -107,7 +107,7 @@ class PseudoQuantizedLinear(nn.Module):
     def _pseudo_quantize(self, weight: torch.Tensor) -> torch.Tensor:
         weight = weight * self.channel_scales
         weight = self.checkpointed(
-            fast_givens_transform, weight, self.pairs_grouped, self.angles_grouped
+            scaled_pairwise_rotation, weight, self.pairs_grouped, self.angles_grouped
         )
         if self.quantizer_optim_enabled or self.quantizer is not None:
             assert self.quantizer is not None, "Quantizer should be initialized."
@@ -124,7 +124,7 @@ class PseudoQuantizedLinear(nn.Module):
             flipped_pairs = torch.flip(self.pairs_grouped, dims=[0])
             flipped_angles = torch.flip(self.angles_grouped, dims=[0])
             weight = self.checkpointed(
-                fast_givens_transform, weight, flipped_pairs, -flipped_angles
+                scaled_pairwise_rotation, weight, flipped_pairs, -flipped_angles
             )
         if self.channel_scales is not None:
             weight = weight / self.channel_scales.view(1, -1)
@@ -153,7 +153,7 @@ class PseudoQuantizedLinear(nn.Module):
             if self.channel_scales is not None:
                 weight = weight * self.channel_scales.view(1, -1)
             if self.pairs_grouped is not None:
-                weight = fast_givens_transform(
+                weight = scaled_pairwise_rotation(
                     weight, self.pairs_grouped, self.angles_grouped
                 )
 

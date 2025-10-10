@@ -5,7 +5,7 @@ from argparse import ArgumentParser
 from matplotlib.colors import LogNorm
 import sys
 
-from fast_givens_transform import fast_givens_transform
+from paroquant_kernels import scaled_pairwise_rotation
 from quant.model import KPseudoQuantizedLinear
 
 # Init plotting formats
@@ -34,7 +34,7 @@ qlinear = KPseudoQuantizedLinear.from_state_dict(results_sd)
 print("Calculating original and rotated weights...")
 weight_r = qlinear.weight.detach()
 weight_r = weight_r * qlinear.channel_scales
-weight_r = fast_givens_transform(
+weight_r = scaled_pairwise_rotation(
     weight_r, qlinear.pairs_grouped, qlinear.angles_grouped
 )
 weight_r_abs = weight_r.T.cpu().abs().numpy()

@@ -86,5 +86,5 @@ class RotateTensorFunc(torch.autograd.Function):
         return grad_x, None, grad_theta, grad_scale
 
 
-def fast_givens_transform(x, idx_ij, theta, scales=None):
+def scaled_pairwise_rotation(x, idx_ij, theta, scales=None):
     return RotateTensorFunc.apply(x, idx_ij, theta, scales)

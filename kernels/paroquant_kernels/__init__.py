@@ -1,14 +1,13 @@
 # Copyright (c) 2025, Haisheng Chen.
 
 import torch
-import _C
-
+from . import _C
 
 @torch.library.register_fake("rotation::rotate")
 def _fake_kernel(x, idx_ij, theta, scales):
     return torch.empty_like(x)
 
+from .interface import RotateTensorFunc, scaled_pairwise_rotation
+from ._C import gemm_forward_cuda_new, gemv_forward_cuda_new
 
-from .interface import RotateTensorFunc, fast_givens_transform
-
-__all__ = ["fast_givens_transform", "RotateTensorFunc"]
+__all__ = ["scaled_pairwise_rotation", "RotateTensorFunc", "gemm_forward_cuda_new", "gemv_forward_cuda_new"]

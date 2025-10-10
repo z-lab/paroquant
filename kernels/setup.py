@@ -65,8 +65,13 @@ setup(
     packages=["paroquant_kernels"],
     ext_modules=[
         cpp_extension.CUDAExtension(
-            "_C",
-            ["paroquant_kernels/csrc/rotation.cu"],
+            "paroquant_kernels._C",
+            [
+                "pybind.cpp",
+                "paroquant_kernels/src/rotation.cu",
+                "paroquant_kernels/awq_inference_kernels/gemv/gemv_cuda.cu",
+                "paroquant_kernels/awq_inference_kernels/gemm/gemm_cuda.cu"
+            ],
             extra_compile_args={
                 "cxx": ["-O2", "-fopenmp", "-lgomp", "-std=c++17", "-DENABLE_BF16"],
                 "nvcc": [
