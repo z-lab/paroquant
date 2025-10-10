@@ -16,9 +16,9 @@ python3 optimize.py \
     --group-size 128 \
     --n-bit 4 \
     --num-rotations 8 \
-    --datasets wikitext2 c4 redpajama \
+    --datasets redpajama \
     --val-dataset pileval \
-    --train-size 2048 \
+    --train-size 512 \
     --validation-size 64 \
     --batch-size 16 \
     --val-batch-size 4 \
