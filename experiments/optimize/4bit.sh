@@ -21,6 +21,7 @@ python3 optimize.py \
     --train-size 2048 \
     --validation-size 64 \
     --batch-size 16 \
+    --val-batch-size 4 \
     --seqlen 2048 \
     --cache-shards $shards \
     --output-dir ./output \

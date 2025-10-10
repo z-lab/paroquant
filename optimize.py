@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from tqdm import tqdm
 from pathlib import Path
 import json
-from typing import Literal
+from typing import Literal, Optional
 import sys
 
 sys.path.append(Path(__file__).parent.as_posix())
@@ -66,6 +66,7 @@ class Config:
     train_size: int
     validation_size: int
     batch_size: int
+    val_batch_size: Optional[int] = None  # Defaults to batch_size if not set.
     seqlen: int
 
     # Number of shards to cache the input/output tensors. At any time, only one shard
@@ -150,11 +151,12 @@ def main():
         samples,
         batch_size=args.batch_size,
     )
+    val_batch_size = args.val_batch_size or args.batch_size
     og_layer_val_input_batches, _ = catch_first_layer_input(
         model,
         blocks,
         val_samples,
-        batch_size=args.batch_size,
+        batch_size=val_batch_size,
     )
     blocks[0].cpu()
 
@@ -304,6 +306,7 @@ def main():
 
             set_checkpointing_enabled(layer, args.checkpointing)
             for step, step_params_dict in enumerate(params_to_optimize):
+                empty_cache()
                 optim_params = []
                 new_modules = get_named_linears(layer, subclass=PseudoQuantizedLinear)
                 for new_module in new_modules.values():
@@ -338,8 +341,6 @@ def main():
                     post_optim_callback=reset_angles_by_mask,
                 )
 
-                empty_cache()
-
             set_checkpointing_enabled(layer, False)
 
             del (
@@ -364,17 +365,15 @@ def main():
             kwargs,
             store_device="cpu",
         )
-        if args.validation_size > 0:
-            new_layer_val_output_batches = forward_layer_batch(
-                layer,
-                layer_val_input_batches,
-                kwargs,
-                store_device="cpu",
-            )
+        new_layer_val_output_batches = forward_layer_batch(
+            layer,
+            layer_val_input_batches,
+            kwargs,
+            store_device="cpu",
+        )
 
         og_layer_input_batches = og_layer_output_batches
-        if args.validation_size > 0:
-            og_layer_val_input_batches = og_layer_val_output_batches
+        og_layer_val_input_batches = og_layer_val_output_batches
 
         if all_files_exist:
             layer.cpu()
