@@ -143,6 +143,7 @@ torch::Tensor rotate_launcher(
     return out;
 }
 
+// Group size = 128
 torch::Tensor rotate_k16g128(at::Tensor x,
                             at::Tensor idx,
                             at::Tensor th,
@@ -179,10 +180,48 @@ torch::Tensor rotate_k1g128(at::Tensor x,
              x, idx, th, sc);
 }
 
+// Group size = 64
+torch::Tensor rotate_k16g64(at::Tensor x,
+                            at::Tensor idx,
+                            at::Tensor th,
+                            at::Tensor sc) {
+    return rotate_launcher<16, 4, 64>(
+             x, idx, th, sc);
+}
+torch::Tensor rotate_k8g64(at::Tensor x,
+                            at::Tensor idx,
+                            at::Tensor th,
+                            at::Tensor sc) {
+    return rotate_launcher<8, 4, 64>(
+             x, idx, th, sc);
+}
+torch::Tensor rotate_k4g64(at::Tensor x,
+                            at::Tensor idx,
+                            at::Tensor th,
+                            at::Tensor sc) {
+    return rotate_launcher<4, 4, 64>(
+             x, idx, th, sc);
+}
+torch::Tensor rotate_k2g64(at::Tensor x,
+                            at::Tensor idx,
+                            at::Tensor th,
+                            at::Tensor sc) {
+    return rotate_launcher<2, 4, 64>(
+             x, idx, th, sc);
+}
+torch::Tensor rotate_k1g64(at::Tensor x,
+                            at::Tensor idx,
+                            at::Tensor th,
+                            at::Tensor sc) {
+    return rotate_launcher<1, 4, 64>(
+             x, idx, th, sc);
+}
+
 torch::Tensor rotate_dynamic(at::Tensor x,
                              at::Tensor idx,
                              at::Tensor theta,
-                             c10::optional<at::Tensor> scales_opt) {
+                             c10::optional<at::Tensor> scales_opt,
+                             int64_t group_size) {
     int64_t krot = theta.size(0);  
     TORCH_CHECK(
       krot == idx.size(0),
@@ -190,16 +229,31 @@ torch::Tensor rotate_dynamic(at::Tensor x,
     ); 
     at::Tensor scales = scales_opt.value_or(at::Tensor());
 
-    switch (krot) {
-      case 16:  return rotate_k16g128(x, idx, theta, scales);
-      case 8:  return rotate_k8g128(x, idx, theta, scales);
-      case 4:  return rotate_k4g128(x, idx, theta, scales);
-      case 2:  return rotate_k2g128(x, idx, theta, scales);
-      case 1:  return rotate_k1g128(x, idx, theta, scales);
-      default:
-          TORCH_CHECK(false, "Unsupported KROT = ", krot,
-                      "; compiled variants: 1/2/4/8");
+    if (group_size == 128) {
+        switch (krot) {
+            case 16: return rotate_k16g128(x, idx, theta, scales);
+            case 8:  return rotate_k8g128(x, idx, theta, scales);
+            case 4:  return rotate_k4g128(x, idx, theta, scales);
+            case 2:  return rotate_k2g128(x, idx, theta, scales);
+            case 1:  return rotate_k1g128(x, idx, theta, scales);
+            default:
+                TORCH_CHECK(false, "Unsupported KROT = ", krot,
+                            "; compiled variants: 1/2/4/8");
+        }
+    } else if (group_size == 64) {
+        switch (krot) {
+            case 16: return rotate_k16g64(x, idx, theta, scales);
+            case 8:  return rotate_k8g64(x, idx, theta, scales);
+            case 4:  return rotate_k4g64(x, idx, theta, scales);
+            case 2:  return rotate_k2g64(x, idx, theta, scales);
+            case 1:  return rotate_k1g64(x, idx, theta, scales);
+            default:
+                TORCH_CHECK(false, "Unsupported KROT = ", krot,
+                            "; compiled variants: 1/2/4/8");
+        }
     }
+
+    TORCH_CHECK(false, "Unexpected group_size: ", group_size);
 }
 
 // C++ launcher
@@ -241,7 +295,7 @@ torch::Tensor rotate_k8g128half_launcher(
 }
 
 TORCH_LIBRARY(rotation, m) {
-    m.def("rotate(Tensor x, Tensor idx_ij, Tensor theta, Tensor? scales=None) -> Tensor");
+    m.def("rotate(Tensor x, Tensor idx_ij, Tensor theta, Tensor? scales=None, int group_size=128) -> Tensor");
 }
 
 TORCH_LIBRARY_IMPL(rotation, CUDA, m) {
