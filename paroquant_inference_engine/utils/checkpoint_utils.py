@@ -59,7 +59,7 @@ def from_pt_to_ckpt(model_name: str, pt_path: str, ckpt_out_path: str, prefix="m
     model = AutoModelForCausalLM.from_pretrained(model_name, device_map='cpu', torch_dtype=torch.float16)
     replace_linears_from_pt(model, pt_path, prefix, ignore_suffix)
     model.half()
-    model.config.rotq_config = {"quant_method": "rotquant", "nbit":4, "krot": krot, "group_size": group_size}
+    model.config.paroquant_config = {"quant_method": "ParoQuant", "nbit":4, "krot": krot, "group_size": group_size}
     model.config.orig_model_name = model_name
     model.save_pretrained(ckpt_out_path)
 

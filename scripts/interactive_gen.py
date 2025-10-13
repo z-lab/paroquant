@@ -34,12 +34,12 @@ def _load_config_dict(path_or_repo: str):
 def model_from_hf_path(path, empty_model=False):
     try:
         bad_config = AutoConfig.from_pretrained(path)
-        is_quantized = hasattr(bad_config, 'rotq_config')
+        is_quantized = hasattr(bad_config, 'paroquant_config')
     except ValueError as e:
         if "qwen3" in str(e).lower():
             d = _load_config_dict(path)
             bad_config = Qwen2Config(**d)
-            is_quantized = hasattr(bad_config, 'rotq_config')
+            is_quantized = hasattr(bad_config, 'paroquant_config')
 
     model_type = bad_config.model_type
     if is_quantized or empty_model:

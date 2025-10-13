@@ -1,11 +1,11 @@
-from rotquant_inference_engine.utils.checkpoint_utils import (
+from paroquant_inference_engine.utils.checkpoint_utils import (
     prepare_weights,
     load_weights_into_module,
 )
 from transformers import AutoTokenizer, AutoConfig
 import torch
 from typing import Optional, Tuple
-from rotquant_inference_engine.model_executor import LlamaForCausalLM, Qwen2ForCausalLM, Qwen3ForCausalLM
+from paroquant_inference_engine.model_executor import LlamaForCausalLM, Qwen2ForCausalLM, Qwen3ForCausalLM
 
 def get_stop_token_ids(model_type, model_path=""):
     if model_type.lower() == "llama":
