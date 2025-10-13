@@ -1,4 +1,4 @@
-#from llm-awq
+#from llm-awq, modified by Haisheng Chen
 import math
 import torch
 import torch.nn as nn
