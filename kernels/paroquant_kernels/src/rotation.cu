@@ -221,7 +221,7 @@ torch::Tensor rotate_dynamic(at::Tensor x,
                              at::Tensor idx,
                              at::Tensor theta,
                              c10::optional<at::Tensor> scales_opt,
-                             int64_t group_size) {
+                             int64_t group_size=128) {
     int64_t krot = theta.size(0);  
     TORCH_CHECK(
       krot == idx.size(0),
