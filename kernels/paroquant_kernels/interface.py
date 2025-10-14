@@ -5,7 +5,7 @@ import torch
 class RotateTensorFunc(torch.autograd.Function):
 
     @staticmethod
-    def forward(ctx, x, idx_ij, theta, scale=None):
+    def forward(ctx, x, idx_ij, theta, scale=None, group_size=128):
         """
         x:      (B, ..., H)
         idx_ij: (KROT, H)
@@ -15,8 +15,9 @@ class RotateTensorFunc(torch.autograd.Function):
 
         ctx.orig_shape, ctx.orig_dtype = x.shape, x.dtype
         ctx.has_scale = scale is not None
+        ctx.group_size = group_size
 
-        y = torch.ops.rotation.rotate(x, idx_ij, theta, scale)
+        y = torch.ops.rotation.rotate(x, idx_ij, theta, scale, group_size)
         saved = (x, idx_ij, theta, y)
         if ctx.has_scale:
             saved += (scale,)
@@ -29,7 +30,7 @@ class RotateTensorFunc(torch.autograd.Function):
         saved = list(ctx.saved_tensors)
         x, idx_ij, theta, y = saved[:4]
         scale = saved[4] if ctx.has_scale else None
-        GROUP_SIZE = 128
+        GROUP_SIZE = ctx.group_size
         g = grad_out.view(-1, x.size(-1))
 
         KROT, H = idx_ij.shape
@@ -41,8 +42,8 @@ class RotateTensorFunc(torch.autograd.Function):
         for i in range(KROT - 1, -1, -1):
             theta_neg = -theta[[i]]
             idx_chunk = idx_ij[[i]]
-            t_prev = torch.ops.rotation.rotate(t, idx_chunk, theta_neg, None)
-            g_prev = torch.ops.rotation.rotate(g, idx_chunk, theta_neg, None)
+            t_prev = torch.ops.rotation.rotate(t, idx_chunk, theta_neg, None, GROUP_SIZE)
+            g_prev = torch.ops.rotation.rotate(g, idx_chunk, theta_neg, None, GROUP_SIZE)
             # t_prev = apply_rotation_step(t, idx_chunk, theta_neg, GROUP_SIZE)
             # g_prev = apply_rotation_step(g, idx_chunk, theta_neg, GROUP_SIZE)
             idx_chunk = idx_chunk.view(num_groups, GROUP_SIZE)
@@ -83,8 +84,8 @@ class RotateTensorFunc(torch.autograd.Function):
 
         grad_x = grad_x_flat.view(ctx.orig_shape).to(ctx.orig_dtype)
 
-        return grad_x, None, grad_theta, grad_scale
+        return grad_x, None, grad_theta, grad_scale, None
 
 
-def scaled_pairwise_rotation(x, idx_ij, theta, scales=None):
-    return RotateTensorFunc.apply(x, idx_ij, theta, scales)
+def scaled_pairwise_rotation(x, idx_ij, theta, scales=None, group_size=128):
+    return RotateTensorFunc.apply(x, idx_ij, theta, scales, group_size)
