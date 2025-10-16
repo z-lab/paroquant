@@ -1,12 +1,11 @@
 import torch
 import torch.nn as nn
-from torch.optim.lr_scheduler import CosineAnnealingLR
 from tqdm import tqdm
 from copy import deepcopy
 from typing import Literal, Optional, Iterator, Callable
 import random
 
-from .util import empty_cache, logger
+from .util import CosineAnnealingParam, logger
 
 
 def _get_independent_channel_pairs(
@@ -102,16 +101,15 @@ def optimize_module(
     train_input_batches, train_output_batches = train_set_batches
     val_input_batches, val_output_batches = val_set_batches
 
-    lr_schedulers: list[CosineAnnealingLR] = []
-    for param_group in optim_params:
-        optimizer = torch.optim.AdamW([{k: v for k, v in param_group.items()}])
-        scheduler = CosineAnnealingLR(
-            optimizer,
-            T_max=n_iter * len(train_input_batches),
-            eta_min=param_group["lr"] / 20,
+    total_steps = n_iter * len(list(train_input_batches))
+    schedulers = [
+        CosineAnnealingParam(
+            start_value=param_group["lr"],
+            end_value=param_group["lr"] / 20,
+            T_max=total_steps,
         )
-        lr_schedulers.append(scheduler)
-
+        for param_group in optim_params
+    ]
     optimizer = torch.optim.AdamW(optim_params)
     scaler = torch.amp.GradScaler()
     if loss_fn == "mse":
@@ -162,9 +160,8 @@ def optimize_module(
             scaler.step(optimizer)
             scaler.update()
 
-            for i, scheduler in enumerate(lr_schedulers):
-                scheduler.step()
-                optimizer.param_groups[i]["lr"] = scheduler.get_lr()[0]
+            for i, scheduler in enumerate(schedulers):
+                optimizer.param_groups[i]["lr"] = scheduler.step()
 
             if post_optim_callback:
                 post_optim_callback(module)
@@ -181,7 +178,6 @@ def optimize_module(
             if early_stop is not None and early_stop_counter >= early_stop:
                 break
 
-        empty_cache()
         progress_bar.set_postfix(
             val_loss=val_loss_value.item(),
             val_og_loss=original_val_loss.item(),

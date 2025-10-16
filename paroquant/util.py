@@ -7,6 +7,7 @@ from typing import Optional, TypeVar
 import warnings
 import random
 import logging
+import math
 from tqdm import tqdm
 
 
@@ -331,6 +332,29 @@ def clamp_ste(
     max: Optional[torch.Tensor] = None,
 ) -> torch.Tensor:
     return (x.clamp(min, max) - x).detach() + x
+
+
+class CosineAnnealingParam:
+    def __init__(self, start_value: float, end_value: float, T_max: int):
+        """
+        Args:
+            start_value (float): The initial value (equivalent to eta_max).
+            end_value (float): The final value (equivalent to eta_min).
+            T_max (int): Maximum number of steps.
+        """
+        self.start_value = start_value
+        self.end_value = end_value
+        self.T_max = T_max
+        self._step = -1
+
+    def step(self) -> float:
+        self._step += 1
+
+        if self._step >= self.T_max:
+            return self.end_value
+
+        cos_val = math.cos(math.pi * self._step / self.T_max)
+        return self.end_value + (self.start_value - self.end_value) * (1 + cos_val) / 2
 
 
 class TqdmLoggingHandler(logging.Handler):
