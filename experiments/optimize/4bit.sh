@@ -16,12 +16,11 @@ python3 optimize.py \
     --group-size 128 \
     --n-bit 4 \
     --num-rotations 8 \
-    --datasets redpajama \
+    --datasets wikitext2 c4 redpajama \
     --val-dataset pileval \
-    --train-size 512 \
+    --train-size 2048 \
     --validation-size 64 \
     --batch-size 16 \
-    --val-batch-size 4 \
     --seqlen 2048 \
     --cache-shards $shards \
     --output-dir ./output \
