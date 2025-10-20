@@ -10,6 +10,8 @@ torch.set_grad_enabled(False)
 
 from paroquant_inference_engine.model_executor.models.llama import LlamaForCausalLM
 from paroquant_inference_engine.model_executor.models.qwen3 import Qwen3ForCausalLM
+from paroquant_inference_engine.model_executor.models.qwen3_fp16 import Qwen3ForCausalLMFP16
+from paroquant_inference_engine.model_executor.models.llama_fp16 import LlamaForCausalLMFP16
 import gc
 from transformers.utils import CONFIG_NAME
 import json 
@@ -60,8 +62,12 @@ def model_from_hf_path(path, empty_model=False):
         else: 
             raise Exception
     else:
-        model_cls = AutoModelForCausalLM
-        model_str = path
+        if model_type == 'llama':
+            model_str = path
+            model_cls = LlamaForCausalLMFP16
+        elif model_type == 'qwen3':
+            model_str = path
+            model_cls = Qwen3ForCausalLMFP16
     if empty_model:
         model = model_cls(bad_config)
         dtype = torch.float16
