@@ -8,11 +8,6 @@ import torch
 # Supported NVIDIA GPU architectures.
 SUPPORTED_ARCHS = {"8.0", "8.6", "8.7", "8.9", "9.0", "10.0", "12.0"}
 
-import os
-os.environ.setdefault("CUDA_HOME", "/usr/local/cuda-13.0")
-os.environ.setdefault("TORCH_CUDA_HOME", "/usr/local/cuda-13.0")
-os.environ.setdefault("CUDA_PATH", "/usr/local/cuda-13.0")
-
 def get_torch_arch_list() -> Set[str]:
     # TORCH_CUDA_ARCH_LIST can have one or more architectures,
     # e.g. "8.0" or "7.5,8.0,8.6+PTX". Here, the "8.6+PTX" option asks the
