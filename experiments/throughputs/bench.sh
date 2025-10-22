@@ -2,7 +2,7 @@
 
 set -e
 
-HF_PATH=$1
+HF_MODEL=$1
 
 
 # Check required transformers version
@@ -19,7 +19,7 @@ fi
 
 # Benchmark single-batch decoding throughput
 python scripts/interactive_gen.py \
-  --hf_path "$HF_PATH" \
+  --hf_path "$HF_MODEL" \
   --bench_model
 
 
