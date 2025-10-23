@@ -117,7 +117,7 @@ def main(args):
             "tasks": "custom|gpqa:diamond|0|0",
             "custom_tasks": "experiments/tasks/reasoning/lighteval_custom/reasoning.py",
         }
-    elif args.dataset == "MMLU_PRO":
+    elif args.dataset == "MMLU-PRO":
         task_kwargs = {
             "tasks": "custom|mmlu_pro|0|0",
             "custom_tasks": "experiments/tasks/reasoning/lighteval_custom/reasoning.py",
