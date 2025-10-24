@@ -1,0 +1,5 @@
+transformers==4.55.2
+vllm==0.10.1
+more_itertools==10.8.0
+lighteval[math]==0.8.1
+datasets==3.6.0

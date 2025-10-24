@@ -88,7 +88,7 @@ def aime24_prompt_fn(line, task_name: str = None):
     return Doc(
         task_name=task_name,
         query=f"{line['Problem']}\n\nPlease reason step by step, and put your final answer within \\boxed{{}}.",
-        choices=[line["Answer"]],
+        choices=[str(line["Answer"])],
         gold_index=0,
     )
 
@@ -97,10 +97,9 @@ def aime25_prompt_fn(line, task_name: str = None):
     return Doc(
         task_name=task_name,
         query=f"{line['problem']}\n\nPlease reason step by step, and put your final answer within \\boxed{{}}.",
-        choices=[line["answer"]],
+        choices=[str(line["answer"])],
         gold_index=0,
     )
-
 
 def gsm8k_prompt_fn(line, task_name: str = None):
     return Doc(
