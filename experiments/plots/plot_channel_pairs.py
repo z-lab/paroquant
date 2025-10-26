@@ -4,13 +4,16 @@ import torch
 from pathlib import Path
 from argparse import ArgumentParser
 import sys
+import heapq
+
+sys.path.extend(
+    [Path(__file__).parent.as_posix(), Path(__file__).parents[2].as_posix()]
+)
 
 from paroquant_kernels import scaled_pairwise_rotation
-from quant.model import KPseudoQuantizedLinear
-from quant.optimize import _get_sorted_sensitive_channel_pairs
+from paroquant.module import PseudoQuantizedLinear
 
 # Init plotting formats
-sys.path.append(str(Path(__file__).resolve().parent))
 from plot_init import *
 
 
@@ -33,11 +36,12 @@ parser.add_argument(
     type=str,
     help="Directory to save the output figure.",
 )
+parser.add_argument("--idx", default=0, type=int)
 args = parser.parse_args()
 
 print("Loading optimized results...")
 results_sd = torch.load(args.optimize_result_path, map_location="cuda")
-qlinear = KPseudoQuantizedLinear.from_state_dict(results_sd)
+qlinear = PseudoQuantizedLinear.from_state_dict(results_sd)
 weight = qlinear.weight.detach()
 
 print("Calculating original and rotated weights...")
@@ -49,19 +53,37 @@ weight_r = scaled_pairwise_rotation(
 
 print("Finding the most sensitive pair...")
 weight_grouped = weight.view(weight.shape[0], -1, args.q_group_size).permute(1, 0, 2)
-# all_pairs = _get_sorted_sensitive_channel_pairs(weight_grouped)
-max_sensitivity = 0
-max_idx = -1, -1
+
+k = 5
+pq = []
+
 for rot_idx in range(qlinear.pairs_grouped.shape[0]):
     pairs = qlinear.pairs_grouped[rot_idx].reshape(-1, 2).cpu()
-    for i, j in pairs:
-        sensitivity = weight[:, i].var() / weight[:, j].var()
-        sensitivity = max(sensitivity, 1 / sensitivity)
-        if sensitivity > max_sensitivity:
-            max_sensitivity = sensitivity
-            max_idx = (i, j)
+    for group_start in range(0, weight.shape[1], args.q_group_size):
+        pairs[group_start : group_start + args.q_group_size] += group_start
 
-i, j = max_idx
+    for i, j in pairs:
+        xi = weight_r[:, i]
+        yj = weight_r[:, j]
+
+        if weight[:, i].var() < weight[:, j].var():
+            xi, yj = yj, xi
+            i, j = j, i
+
+        corr = torch.corrcoef(torch.stack([xi, yj]))[0, 1].item()
+
+        if len(pq) < k:
+            heapq.heappush(pq, (corr, (i.item(), j.item())))
+        else:
+            if corr > pq[0][0]:
+                heapq.heapreplace(pq, (corr, (i.item(), j.item())))
+
+top_k = sorted(pq, key=lambda x: x[0], reverse=True)
+
+for corr, (i, j) in top_k:
+    print(f"Pair ({i}, {j}) -> corr={corr:.6f}")
+
+i, j = top_k[args.idx][1]
 
 channel_i = weight[:, i].clone()
 channel_j = weight[:, j].clone()

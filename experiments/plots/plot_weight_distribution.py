@@ -5,11 +5,14 @@ from argparse import ArgumentParser
 from matplotlib.colors import LogNorm
 import sys
 
+sys.path.extend(
+    [Path(__file__).parent.as_posix(), Path(__file__).parents[2].as_posix()]
+)
+
 from paroquant_kernels import scaled_pairwise_rotation
-from quant.model import KPseudoQuantizedLinear
+from paroquant.module import PseudoQuantizedLinear
 
 # Init plotting formats
-sys.path.append(str(Path(__file__).resolve().parent))
 from plot_init import *
 
 parser = ArgumentParser()
@@ -29,7 +32,7 @@ args = parser.parse_args()
 
 print("Loading optimized results...")
 results_sd = torch.load(args.optimize_result_path, map_location="cuda")
-qlinear = KPseudoQuantizedLinear.from_state_dict(results_sd)
+qlinear = PseudoQuantizedLinear.from_state_dict(results_sd)
 
 print("Calculating original and rotated weights...")
 weight_r = qlinear.weight.detach()

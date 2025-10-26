@@ -13,14 +13,14 @@ if shutil.which("latex") and not os.environ.get("NO_LATEX", False):
             "text.usetex": True,
             "pgf.rcfonts": False,
             "pgf.texsystem": "pdflatex",
+            "mathtext.fontset": "cm",
+            "font.family": "serif",
+            "font.serif": ["Times New Roman"],
         }
     )
 
 plt.rcParams.update(
     {
-        "mathtext.fontset": "cm",
-        "font.family": "serif",
-        "font.serif": ["Times New Roman"],
         "font.size": 9,
         "axes.labelsize": 10,
         "axes.titlesize": 10,
