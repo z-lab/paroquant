@@ -8,7 +8,7 @@ We use pseudo-quantized models for all experiments, except for experiments on AW
 
 To quantize and optimize a model with ParoQuant:
 
-```bash
+```
 ./experiments/optimize/4_bit.sh <model> [<num_shards>]
 ```
 
@@ -28,13 +28,13 @@ To evaluate downstream tasks, use [`tasks/reasoning.sh`](./tasks/reasoning.sh) f
 
 To run non-reasoning tasks:
 
-```bash
+```
 ./experiments/tasks/non_reasoning.py <model_path>
 ```
 
 We use a separate environment for reasoning tasks. To run reasoning tasks:
 
-```bash
+```
 conda env create -f ./experiments/tasks/reasoning/environment.yml
 conda activate paroquant-eval
 ./experiments/tasks/reasoning.py <model_path> <seed> [<task0>, <task1>, ...]
@@ -46,7 +46,7 @@ The seeds we use in our paper are 42 for MMLU-Pro and 42, 0, 1 for other tasks.
 
 Use [`throughput/bench.sh`](./throughput/bench.sh) to benchmark the decoding throughput of a real-quantized ParoQuant model:
 
-```bash
+```
 ./experiments/throughput/bench.sh <model_path>
 ```
 

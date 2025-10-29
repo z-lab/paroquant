@@ -5,3 +5,4 @@ torchvision==0.23.0
 transformers==4.55.2
 simple_parsing==0.1.7
 zstandard==0.23.0
+lm_eval==0.4.9.1

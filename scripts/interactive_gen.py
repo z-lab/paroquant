@@ -325,34 +325,34 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Your CLI description.")
 
-    parser.add_argument("--hf_path", type=str, help="Path to checkpoint")
+    parser.add_argument("--hf-path", type=str, help="Path to checkpoint")
     parser.add_argument(
         "--streaming", action="store_true", help="Whether to launch in stream mode"
     )
     parser.add_argument(
-        "--max_new_tokens", type=int, default=512, help="Maximum number of new tokens."
+        "--max-new-tokens", type=int, default=512, help="Maximum number of new tokens."
     )
-    parser.add_argument("--top_k", type=int, default=32, help="Top-k for sampling.")
+    parser.add_argument("--top-k", type=int, default=32, help="Top-k for sampling.")
     parser.add_argument(
-        "--no_compile", action="store_true", help="Whether to compile the model."
+        "--no-compile", action="store_true", help="Whether to compile the model."
     )
     parser.add_argument(
-        "--disable_tf32",
+        "--disable-tf32",
         action="store_true",
         help="Whether to disable TF32 for FP32 matmuls.",
     )
     parser.add_argument(
-        "--bench_model",
+        "--bench-model",
         action="store_true",
         help="load pretrained model by config for benchmark",
     )
     parser.add_argument(
-        "--empty_model",
+        "--empty-model",
         action="store_true",
         help="load empty model by config for benchmark",
     )
-    parser.add_argument("--prefill_len", default=256, help="prefill len for benchmark")
-    parser.add_argument("--decode_len", default=512, help="decode len for benchmark")
+    parser.add_argument("--prefill-len", default=256, help="prefill len for benchmark")
+    parser.add_argument("--decode-len", default=512, help="decode len for benchmark")
 
     args = parser.parse_args()
 
