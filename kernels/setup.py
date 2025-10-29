@@ -8,6 +8,7 @@ import torch
 # Supported NVIDIA GPU architectures.
 SUPPORTED_ARCHS = {"8.0", "8.6", "8.7", "8.9", "9.0", "10.0", "12.0"}
 
+
 def get_torch_arch_list() -> Set[str]:
     # TORCH_CUDA_ARCH_LIST can have one or more architectures,
     # e.g. "8.0" or "7.5,8.0,8.6+PTX". Here, the "8.6+PTX" option asks the
@@ -69,7 +70,7 @@ setup(
                 "pybind.cpp",
                 "paroquant_kernels/src/rotation.cu",
                 "paroquant_kernels/awq_inference_kernels/gemv/gemv_cuda.cu",
-                "paroquant_kernels/awq_inference_kernels/gemm/gemm_cuda.cu"
+                "paroquant_kernels/awq_inference_kernels/gemm/gemm_cuda.cu",
             ],
             extra_compile_args={
                 "cxx": ["-O2", "-fopenmp", "-lgomp", "-std=c++17", "-DENABLE_BF16"],

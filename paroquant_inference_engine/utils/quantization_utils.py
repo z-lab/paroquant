@@ -1,5 +1,6 @@
 import torch
 
+
 def set_op_by_name(layer, name, new_module):
     levels = name.split(".")
     if len(levels) > 1:
@@ -15,7 +16,14 @@ def set_op_by_name(layer, name, new_module):
 
 
 def pseudo_quantize_tensor(
-    w, n_bit=8, zero_point=True, q_group_size=-1, inplace=False, get_scale_zp=False, qzeros=None, qscales=None
+    w,
+    n_bit=8,
+    zero_point=True,
+    q_group_size=-1,
+    inplace=False,
+    get_scale_zp=False,
+    qzeros=None,
+    qscales=None,
 ):
     org_w_shape = w.shape
     if q_group_size > 0:
@@ -45,7 +53,9 @@ def pseudo_quantize_tensor(
 
     if inplace:
         (
-            (w.div_(qscales).round_().add_(qzeros)).clamp_(min_int, max_int).sub_(qzeros)
+            (w.div_(qscales).round_().add_(qzeros))
+            .clamp_(min_int, max_int)
+            .sub_(qzeros)
         ).mul_(qscales)
     else:
         max_int = 2**n_bit - 1

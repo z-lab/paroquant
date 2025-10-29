@@ -35,7 +35,10 @@ latex_gold_metric = multilingual_extractive_match_metric(
     precision=5,
     gold_extraction_target=(LatexExtractionConfig(),),
     # Match boxed first before trying other regexes
-    pred_extraction_target=(ExprExtractionConfig(), LatexExtractionConfig(boxed_match_priority=0)),
+    pred_extraction_target=(
+        ExprExtractionConfig(),
+        LatexExtractionConfig(boxed_match_priority=0),
+    ),
     aggregation_function=max,
 )
 
@@ -45,7 +48,10 @@ expr_gold_metric = multilingual_extractive_match_metric(
     precision=5,
     gold_extraction_target=(ExprExtractionConfig(),),
     # Match boxed first before trying other regexes
-    pred_extraction_target=(ExprExtractionConfig(), LatexExtractionConfig(boxed_match_priority=0)),
+    pred_extraction_target=(
+        ExprExtractionConfig(),
+        LatexExtractionConfig(boxed_match_priority=0),
+    ),
     aggregation_function=max,
 )
 
@@ -55,23 +61,34 @@ expr_gsm8k_metric = multilingual_extractive_match_metric(
     precision=5,
     gold_extraction_target=(ExprExtractionConfig(),),
     # Match boxed first before trying other regexes
-    pred_extraction_target=(ExprExtractionConfig(), LatexExtractionConfig(boxed_match_priority=0)),
+    pred_extraction_target=(
+        ExprExtractionConfig(),
+        LatexExtractionConfig(boxed_match_priority=0),
+    ),
     aggregation_function=max,
 )
 
 gpqa_metric = multilingual_extractive_match_metric(
     language=Language.ENGLISH,
-    gold_extraction_target=[IndicesExtractionConfig(prefix_for_extraction="NativeLetters")],
-    pred_extraction_target=[IndicesExtractionConfig(prefix_for_extraction="NativeLetters")],
+    gold_extraction_target=[
+        IndicesExtractionConfig(prefix_for_extraction="NativeLetters")
+    ],
+    pred_extraction_target=[
+        IndicesExtractionConfig(prefix_for_extraction="NativeLetters")
+    ],
     precision=5,
 )
 
 mmlu_pro_metric = multilingual_extractive_match_metric(
     language=Language.ENGLISH,
-    gold_extraction_target=[IndicesExtractionConfig(prefix_for_extraction="NativeLetters")],
-    pred_extraction_target=[IndicesExtractionConfig(prefix_for_extraction="NativeLetters")],
+    gold_extraction_target=[
+        IndicesExtractionConfig(prefix_for_extraction="NativeLetters")
+    ],
+    pred_extraction_target=[
+        IndicesExtractionConfig(prefix_for_extraction="NativeLetters")
+    ],
     precision=5,
-)   
+)
 
 
 def prompt_fn(line, task_name: str = None):
@@ -101,6 +118,7 @@ def aime25_prompt_fn(line, task_name: str = None):
         gold_index=0,
     )
 
+
 def gsm8k_prompt_fn(line, task_name: str = None):
     return Doc(
         task_name=task_name,
@@ -113,10 +131,20 @@ def gsm8k_prompt_fn(line, task_name: str = None):
 def gpqa_prompt_fn(line, task_name: str = None):
     """Prompt template adapted from simple-evals: https://github.com/openai/simple-evals/blob/83ed7640a7d9cd26849bcb3340125002ef14abbe/common.py#L14"""
     gold_index = random.randint(0, 3)
-    choices = [line["Incorrect Answer 1"], line["Incorrect Answer 2"], line["Incorrect Answer 3"]]
+    choices = [
+        line["Incorrect Answer 1"],
+        line["Incorrect Answer 2"],
+        line["Incorrect Answer 3"],
+    ]
     choices.insert(gold_index, line["Correct Answer"])
     query_template = "Answer the following multiple choice question. The last line of your response should be of the following format: 'Answer: $LETTER' (without quotes) where LETTER is one of ABCD. Think step by step before answering.\n\n{Question}\n\nA) {A}\nB) {B}\nC) {C}\nD) {D}"
-    query = query_template.format(A=choices[0], B=choices[1], C=choices[2], D=choices[3], Question=line["Question"])
+    query = query_template.format(
+        A=choices[0],
+        B=choices[1],
+        C=choices[2],
+        D=choices[3],
+        Question=line["Question"],
+    )
 
     return Doc(
         task_name=task_name,
@@ -125,6 +153,7 @@ def gpqa_prompt_fn(line, task_name: str = None):
         gold_index=gold_index,
         instruction=query,
     )
+
 
 def mmlu_pro_prompt_fn(line, task_name: str = None):
     """
@@ -142,12 +171,12 @@ def mmlu_pro_prompt_fn(line, task_name: str = None):
 
     n = len(original_options)
     assert 1 <= n <= 26, f"Number of options must be between 1 and 26, got {n}"
-    
+
     # Validate that answer label is within range
     valid_labels = [chr(ord("A") + i) for i in range(n)]
-    assert original_answer_label in valid_labels, (
-        f"Answer label '{original_answer_label}' not in valid labels {valid_labels}"
-    )
+    assert (
+        original_answer_label in valid_labels
+    ), f"Answer label '{original_answer_label}' not in valid labels {valid_labels}"
 
     # Get correct answer text
     original_index = ord(original_answer_label) - ord("A")
@@ -162,7 +191,9 @@ def mmlu_pro_prompt_fn(line, task_name: str = None):
 
     # Generate labels A, B, C, ..., up to N options, formatted as "A)", "B)", etc.
     labels = [chr(ord("A") + i) for i in range(n)]
-    options_str = "\n".join(f"{label}) {opt}" for label, opt in zip(labels, shuffled_options))
+    options_str = "\n".join(
+        f"{label}) {opt}" for label, opt in zip(labels, shuffled_options)
+    )
 
     # Use GPQA-style instruction: require "Answer: LETTER" at the end
     query_template = (
@@ -173,9 +204,7 @@ def mmlu_pro_prompt_fn(line, task_name: str = None):
     )
     valid_letters_str = "".join(labels)  # e.g., "ABCD" or "ABCDE"
     query = query_template.format(
-        Question=line["question"],
-        Options=options_str,
-        valid_letters=valid_letters_str
+        Question=line["question"], Options=options_str, valid_letters=valid_letters_str
     )
 
     return Doc(
@@ -185,6 +214,7 @@ def mmlu_pro_prompt_fn(line, task_name: str = None):
         gold_index=gold_index,
         instruction=query,
     )
+
 
 # Define tasks
 aime24 = LightevalTaskConfig(
@@ -205,7 +235,7 @@ aime25 = LightevalTaskConfig(
     name="aime25",
     suite=["custom"],
     prompt_function=aime25_prompt_fn,
-    hf_repo="yentinglin/aime_2025",  
+    hf_repo="yentinglin/aime_2025",
     hf_subset="default",
     hf_avail_splits=["train"],
     evaluation_splits=["train"],
@@ -233,7 +263,7 @@ math_500 = LightevalTaskConfig(
     name="math_500",
     suite=["custom"],
     prompt_function=prompt_fn,
-    hf_repo="HuggingFaceH4/MATH-500",  
+    hf_repo="HuggingFaceH4/MATH-500",
     hf_subset="default",
     hf_avail_splits=["test"],
     evaluation_splits=["test"],
@@ -261,7 +291,7 @@ gsm8k = LightevalTaskConfig(
     name="gsm8k",
     suite=["custom"],
     prompt_function=gsm8k_prompt_fn,
-    hf_repo="openai/gsm8k",   
+    hf_repo="openai/gsm8k",
     hf_subset="main",
     hf_avail_splits=["train", "test"],
     evaluation_splits=["test"],
@@ -296,14 +326,13 @@ mmlu_pro = LightevalTaskConfig(
     hf_subset=None,
     hf_avail_splits=["test"],
     evaluation_splits=["test"],
-    few_shots_split=None,     
-    few_shots_select=None,  
-    generation_size=32768,    
-    metric=[mmlu_pro_metric],   
-    stop_sequence=[],       
+    few_shots_split=None,
+    few_shots_select=None,
+    generation_size=32768,
+    metric=[mmlu_pro_metric],
+    stop_sequence=[],
     version=1,
 )
-
 
 
 # Add tasks to the table

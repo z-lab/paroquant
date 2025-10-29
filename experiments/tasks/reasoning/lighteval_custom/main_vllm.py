@@ -41,65 +41,123 @@ def vllm(
     # === general ===
     model_config: Annotated[
         VLLMModelConfig,
-        Argument(
-            help="Model and generation arguments"
-        ),
+        Argument(help="Model and generation arguments"),
     ],
-    tasks: Annotated[str, Argument(help="Comma-separated list of tasks to evaluate on.")],
+    tasks: Annotated[
+        str, Argument(help="Comma-separated list of tasks to evaluate on.")
+    ],
     # === Common parameters ===
     use_chat_template: Annotated[
-        bool, Option(help="Use chat template for evaluation.", rich_help_panel=HELP_PANEL_NAME_4)
+        bool,
+        Option(
+            help="Use chat template for evaluation.", rich_help_panel=HELP_PANEL_NAME_4
+        ),
     ] = False,
     system_prompt: Annotated[
-        Optional[str], Option(help="Use system prompt for evaluation.", rich_help_panel=HELP_PANEL_NAME_4)
+        Optional[str],
+        Option(
+            help="Use system prompt for evaluation.", rich_help_panel=HELP_PANEL_NAME_4
+        ),
     ] = None,
     dataset_loading_processes: Annotated[
-        int, Option(help="Number of processes to use for dataset loading.", rich_help_panel=HELP_PANEL_NAME_1)
+        int,
+        Option(
+            help="Number of processes to use for dataset loading.",
+            rich_help_panel=HELP_PANEL_NAME_1,
+        ),
     ] = 1,
     custom_tasks: Annotated[
-        Optional[str], Option(help="Path to custom tasks directory.", rich_help_panel=HELP_PANEL_NAME_1)
+        Optional[str],
+        Option(
+            help="Path to custom tasks directory.", rich_help_panel=HELP_PANEL_NAME_1
+        ),
     ] = None,
     cache_dir: Annotated[
-        str, Option(help="Cache directory for datasets and models.", rich_help_panel=HELP_PANEL_NAME_1)
+        str,
+        Option(
+            help="Cache directory for datasets and models.",
+            rich_help_panel=HELP_PANEL_NAME_1,
+        ),
     ] = CACHE_DIR,
     num_fewshot_seeds: Annotated[
-        int, Option(help="Number of seeds to use for few-shot evaluation.", rich_help_panel=HELP_PANEL_NAME_1)
+        int,
+        Option(
+            help="Number of seeds to use for few-shot evaluation.",
+            rich_help_panel=HELP_PANEL_NAME_1,
+        ),
     ] = 1,
     load_responses_from_details_date_id: Annotated[
-        Optional[str], Option(help="Load responses from details directory.", rich_help_panel=HELP_PANEL_NAME_1)
+        Optional[str],
+        Option(
+            help="Load responses from details directory.",
+            rich_help_panel=HELP_PANEL_NAME_1,
+        ),
     ] = None,
     # === saving ===
     output_dir: Annotated[
-        str, Option(help="Output directory for evaluation results.", rich_help_panel=HELP_PANEL_NAME_2)
+        str,
+        Option(
+            help="Output directory for evaluation results.",
+            rich_help_panel=HELP_PANEL_NAME_2,
+        ),
     ] = "results",
     push_to_hub: Annotated[
-        bool, Option(help="Push results to the huggingface hub.", rich_help_panel=HELP_PANEL_NAME_2)
+        bool,
+        Option(
+            help="Push results to the huggingface hub.",
+            rich_help_panel=HELP_PANEL_NAME_2,
+        ),
     ] = False,
     push_to_tensorboard: Annotated[
-        bool, Option(help="Push results to tensorboard.", rich_help_panel=HELP_PANEL_NAME_2)
+        bool,
+        Option(help="Push results to tensorboard.", rich_help_panel=HELP_PANEL_NAME_2),
     ] = False,
     public_run: Annotated[
-        bool, Option(help="Push results and details to a public repo.", rich_help_panel=HELP_PANEL_NAME_2)
+        bool,
+        Option(
+            help="Push results and details to a public repo.",
+            rich_help_panel=HELP_PANEL_NAME_2,
+        ),
     ] = False,
     results_org: Annotated[
-        Optional[str], Option(help="Organization to push results to.", rich_help_panel=HELP_PANEL_NAME_2)
+        Optional[str],
+        Option(
+            help="Organization to push results to.", rich_help_panel=HELP_PANEL_NAME_2
+        ),
     ] = None,
     save_details: Annotated[
-        bool, Option(help="Save detailed, sample per sample, results.", rich_help_panel=HELP_PANEL_NAME_2)
+        bool,
+        Option(
+            help="Save detailed, sample per sample, results.",
+            rich_help_panel=HELP_PANEL_NAME_2,
+        ),
     ] = False,
     # === debug ===
     max_samples: Annotated[
-        Optional[int], Option(help="Maximum number of samples to evaluate on.", rich_help_panel=HELP_PANEL_NAME_3)
+        Optional[int],
+        Option(
+            help="Maximum number of samples to evaluate on.",
+            rich_help_panel=HELP_PANEL_NAME_3,
+        ),
     ] = None,
     job_id: Annotated[
-        int, Option(help="Optional job id for future reference.", rich_help_panel=HELP_PANEL_NAME_3)
+        int,
+        Option(
+            help="Optional job id for future reference.",
+            rich_help_panel=HELP_PANEL_NAME_3,
+        ),
     ] = 0,
 ):
     """
     Evaluate models using vllm as backend.
     """
     from lighteval.logging.evaluation_tracker import EvaluationTracker
-    from lighteval.pipeline import EnvConfig, ParallelismManager, Pipeline, PipelineParameters
+    from lighteval.pipeline import (
+        EnvConfig,
+        ParallelismManager,
+        Pipeline,
+        PipelineParameters,
+    )
 
     TOKEN = os.getenv("HF_TOKEN")
 
@@ -125,7 +183,7 @@ def vllm(
         max_samples=max_samples,
         use_chat_template=use_chat_template,
         system_prompt=system_prompt,
-        load_responses_from_details_date_id=load_responses_from_details_date_id
+        load_responses_from_details_date_id=load_responses_from_details_date_id,
     )
 
     pipeline = Pipeline(

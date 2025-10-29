@@ -1,9 +1,12 @@
 import torch
 from lm_eval.base import BaseLM
 
+
 class LMEvalAdaptor(BaseLM):
 
-    def __init__(self, model: torch.nn.Module, tokenizer, batch_size=1, max_length=None):
+    def __init__(
+        self, model: torch.nn.Module, tokenizer, batch_size=1, max_length=None
+    ):
         super().__init__()
 
         assert isinstance(batch_size, int)
@@ -15,7 +18,11 @@ class LMEvalAdaptor(BaseLM):
 
         self.vocab_size = self.tokenizer.vocab_size
         self._batch_size = batch_size
-        self._max_length = self.model.config.max_position_embeddings if max_length is None else max_length
+        self._max_length = (
+            self.model.config.max_position_embeddings
+            if max_length is None
+            else max_length
+        )
 
     @property
     def eot_token_id(self):
@@ -48,18 +55,21 @@ class LMEvalAdaptor(BaseLM):
         outputs = []
         for i in range(inps.shape[0]):
             inp_single = inps[i].unsqueeze(0)
-            
+
             with torch.no_grad():
-                h = self.model.model.ppl_forward(tokens=inp_single, start_pos=0, chunk_prefilling=False)
+                h = self.model.model.ppl_forward(
+                    tokens=inp_single, start_pos=0, chunk_prefilling=False
+                )
                 logits = self.model.lm_head(h)
             outputs.append(logits)
 
         return torch.cat(outputs, dim=0)
 
-
-    def _model_generate(self, context: torch.Tensor, max_length: int, eos_token_id: int):
+    def _model_generate(
+        self, context: torch.Tensor, max_length: int, eos_token_id: int
+    ):
         assert context.shape[0] == 1, "Generation only supports a batch size of 1."
-        
+
         generated_tokens = []
         with torch.no_grad():
             logits = self.model(tokens=context, start_pos=0)
@@ -68,16 +78,19 @@ class LMEvalAdaptor(BaseLM):
 
                 if next_token.item() == eos_token_id:
                     break
-                
+
                 generated_tokens.append(next_token.item())
                 input_token = next_token.unsqueeze(0)
                 start_pos = context.shape[1] + i
-                
+
                 logits = self.model(tokens=input_token, start_pos=start_pos)
         if not generated_tokens:
             return context
-        
-        return torch.cat([
-            context,
-            torch.tensor([generated_tokens], device=self.device, dtype=torch.long)
-        ], dim=1)
+
+        return torch.cat(
+            [
+                context,
+                torch.tensor([generated_tokens], device=self.device, dtype=torch.long),
+            ],
+            dim=1,
+        )

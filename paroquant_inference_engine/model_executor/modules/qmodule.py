@@ -1,10 +1,11 @@
-#from llm-awq, modified by Haisheng Chen
+# from llm-awq, modified by Haisheng Chen
 
 import math
 import torch
 import torch.nn as nn
 import paroquant_inference_engine.model_executor.modules.gemv_op
 from paroquant_kernels import gemm_forward_cuda_new
+
 
 def make_divisible(c, divisor):
     return (c + divisor - 1) // divisor
@@ -78,7 +79,9 @@ class ScaledActivation(nn.Module):
 
 
 class WQLinear(nn.Module):
-    def __init__(self, w_bit, group_size, in_features, out_features, bias, dtype=torch.float16):
+    def __init__(
+        self, w_bit, group_size, in_features, out_features, bias, dtype=torch.float16
+    ):
         super().__init__()
 
         if w_bit not in [4]:
@@ -129,9 +132,7 @@ class WQLinear(nn.Module):
         )
 
         if bias:
-            self.register_buffer(
-                "bias", torch.zeros((out_features), dtype=dtype)
-            )
+            self.register_buffer("bias", torch.zeros((out_features), dtype=dtype))
         else:
             self.bias = None
 
@@ -145,7 +146,7 @@ class WQLinear(nn.Module):
             linear.in_features,
             linear.out_features,
             linear.bias is not None,
-            dtype=linear.weight.data.dtype
+            dtype=linear.weight.data.dtype,
         )
         if init_only:  # just prepare for loading sd
             return awq_linear
@@ -199,13 +200,18 @@ class WQLinear(nn.Module):
         # inputs = x.reshape(-1, x.shape[-1])
         if inputs.numel() / inputs.shape[-1] < 8:
             out = torch.ops.awq.gemv(
-                inputs, self.qweight, self.scales, self.scaled_zeros, self.group_size, self.interleave
+                inputs,
+                self.qweight,
+                self.scales,
+                self.scaled_zeros,
+                self.group_size,
+                self.interleave,
             )
 
         else:
             out = gemm_forward_cuda_new(
                 inputs, self.qweight, self.scales, self.scaled_zeros
-            )  
+            )
         out = out + self.bias if self.bias is not None else out
         # print(out)
         # assert 0

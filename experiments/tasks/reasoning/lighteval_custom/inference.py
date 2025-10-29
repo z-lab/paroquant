@@ -17,27 +17,59 @@ from experiments.tasks.reasoning.lighteval_custom.main_vllm import vllm
 
 def parser_gen():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--debug', action="store_true")
-    parser.add_argument("--overwrite", action="store_true", help="whether to re-evaluate")
-    parser.add_argument('--output_dir', type=str, default=None,
-                        help='Path to save inference results.')
+    parser.add_argument("--debug", action="store_true")
+    parser.add_argument(
+        "--overwrite", action="store_true", help="whether to re-evaluate"
+    )
+    parser.add_argument(
+        "--output_dir", type=str, default=None, help="Path to save inference results."
+    )
     # model
-    parser.add_argument('--model', type=str, default='./modelzoo/DeepSeek-R1/DeepSeek-R1-Distill-Qwen-7B',
-                        help='Model to load.')
-    parser.add_argument('--dtype', type=str, default='bfloat16', help='dtype to use')
+    parser.add_argument(
+        "--model",
+        type=str,
+        default="./modelzoo/DeepSeek-R1/DeepSeek-R1-Distill-Qwen-7B",
+        help="Model to load.",
+    )
+    parser.add_argument("--dtype", type=str, default="bfloat16", help="dtype to use")
     # dataset
-    parser.add_argument('--dataset', type=str, default='AIME-2024',
-                        choices=["AIME-2024", "AIME-2025", "AIME-90", "MATH-500", "NuminaMath-1.5", "GSM8K", "GPQA-Diamond", "MMLU-PRO"],
-                        help='Dataset to load.')
-    parser.add_argument('--max_samples', type=int, default=None, help='Max #samples (for debug)')
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        default="AIME-2024",
+        choices=[
+            "AIME-2024",
+            "AIME-2025",
+            "AIME-90",
+            "MATH-500",
+            "NuminaMath-1.5",
+            "GSM8K",
+            "GPQA-Diamond",
+            "MMLU-PRO",
+        ],
+        help="Dataset to load.",
+    )
+    parser.add_argument(
+        "--max_samples", type=int, default=None, help="Max #samples (for debug)"
+    )
     # generation
-    parser.add_argument('--temperature', type=float, default=0.6, help='Generation temperature')
-    parser.add_argument('--top_p', type=float, default=0.95, help='Generation top_p')
-    parser.add_argument('--seed', type=int, default=42, help='Generation seed')
-    parser.add_argument('--max_new_tokens', type=int, default=32768,
-                        help='Maximum number of tokens to generate per output sequence.')
-    parser.add_argument('--max_model_length', type=int, default=32768,
-                        help='Maximum model input length.')
+    parser.add_argument(
+        "--temperature", type=float, default=0.6, help="Generation temperature"
+    )
+    parser.add_argument("--top_p", type=float, default=0.95, help="Generation top_p")
+    parser.add_argument("--seed", type=int, default=42, help="Generation seed")
+    parser.add_argument(
+        "--max_new_tokens",
+        type=int,
+        default=32768,
+        help="Maximum number of tokens to generate per output sequence.",
+    )
+    parser.add_argument(
+        "--max_model_length",
+        type=int,
+        default=32768,
+        help="Maximum model input length.",
+    )
     args = parser.parse_args()
 
     # force float16 for gptqmodel inference
@@ -46,7 +78,11 @@ def parser_gen():
 
     # output path
     args.model_name = args.model.strip("/").replace("/", "_")
-    output_dir = os.path.join("./outputs", "inference", f"{args.model_name}-seed{args.seed}") if args.output_dir is None else args.output_dir
+    output_dir = (
+        os.path.join("./outputs", "inference", f"{args.model_name}-seed{args.seed}")
+        if args.output_dir is None
+        else args.output_dir
+    )
     os.makedirs(output_dir, exist_ok=True)
     args.output_path = os.path.join(output_dir, f"{args.dataset}.jsonl")
 
@@ -54,6 +90,7 @@ def parser_gen():
     args.tensor_parallel_size = torch.cuda.device_count()
 
     return args
+
 
 def main(args):
     if not args.debug and not args.overwrite and os.path.exists(args.output_path):
@@ -68,7 +105,7 @@ def main(args):
         top_p=args.top_p,
         top_k=30 if "QwQ" in args.model else None,  # TODO. enable top_k only for QwQ?
         max_new_tokens=args.max_new_tokens,
-        seed=args.seed
+        seed=args.seed,
     )
     model_config = VLLMModelConfig(
         pretrained=args.model,
@@ -135,12 +172,14 @@ def main(args):
     eval_results = []
     task_name = list(details.keys())[0]
     for detail in details[task_name]:
-        eval_results.append({
-            "full_prompt": detail["full_prompt"],
-            "generated_text": detail["predictions"][0],
-            "gold": detail["gold"],
-            "metrics": detail["metrics"]
-        })
+        eval_results.append(
+            {
+                "full_prompt": detail["full_prompt"],
+                "generated_text": detail["predictions"][0],
+                "gold": detail["gold"],
+                "metrics": detail["metrics"],
+            }
+        )
     with open(args.output_path, "w") as f:
         json.dump(eval_results, f, indent=4)
     print(f"Evaluation results saved at {args.output_path}.")

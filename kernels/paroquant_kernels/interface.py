@@ -2,6 +2,7 @@
 
 import torch
 
+
 class RotateTensorFunc(torch.autograd.Function):
 
     @staticmethod
@@ -42,8 +43,12 @@ class RotateTensorFunc(torch.autograd.Function):
         for i in range(KROT - 1, -1, -1):
             theta_neg = -theta[[i]]
             idx_chunk = idx_ij[[i]]
-            t_prev = torch.ops.rotation.rotate(t, idx_chunk, theta_neg, None, GROUP_SIZE)
-            g_prev = torch.ops.rotation.rotate(g, idx_chunk, theta_neg, None, GROUP_SIZE)
+            t_prev = torch.ops.rotation.rotate(
+                t, idx_chunk, theta_neg, None, GROUP_SIZE
+            )
+            g_prev = torch.ops.rotation.rotate(
+                g, idx_chunk, theta_neg, None, GROUP_SIZE
+            )
             # t_prev = apply_rotation_step(t, idx_chunk, theta_neg, GROUP_SIZE)
             # g_prev = apply_rotation_step(g, idx_chunk, theta_neg, GROUP_SIZE)
             idx_chunk = idx_chunk.view(num_groups, GROUP_SIZE)

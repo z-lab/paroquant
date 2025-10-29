@@ -36,7 +36,9 @@ class VLLMMODELConfigEdit:
     tensor_parallel_size: int = 1  # how many GPUs to use for tensor parallelism
     pipeline_parallel_size: int = 1  # how many GPUs to use for pipeline parallelism
     data_parallel_size: int = 1  # how many GPUs to use for data parallelism
-    max_model_length: int | None = None  # maximum length of the model, ussually infered automatically. reduce this if you encouter OOM issues, 4096 is usually enough
+    max_model_length: int | None = (
+        None  # maximum length of the model, ussually infered automatically. reduce this if you encouter OOM issues, 4096 is usually enough
+    )
     swap_space: int = 4  # CPU swap space size (GiB) per GPU.
     seed: int = 1234
     trust_remote_code: bool = False
@@ -45,8 +47,12 @@ class VLLMMODELConfigEdit:
     multichoice_continuations_start_space: bool = (
         True  # whether to add a space at the start of each continuation in multichoice generation
     )
-    pairwise_tokenization: bool = False  # whether to tokenize the context and continuation separately or together.
-    generation_parameters: GenerationParameters = None  # sampling parameters to use for generation
+    pairwise_tokenization: bool = (
+        False  # whether to tokenize the context and continuation separately or together.
+    )
+    generation_parameters: GenerationParameters = (
+        None  # sampling parameters to use for generation
+    )
     enforce_eager: bool = None
     enable_prefix_caching: bool = None
     enable_chunked_prefill: bool = None
@@ -57,55 +63,59 @@ class VLLMMODELConfigEdit:
         if not self.generation_parameters:
             self.generation_parameters = GenerationParameters()
 
+
 vllm_model.VLLMModelConfig = VLLMMODELConfigEdit
 
-def _create_auto_model(self, config: vllm_model.VLLMModelConfig, env_config: EnvConfig) -> Optional[LLM]: # type: ignore
-        """
-        Creates an instance of the pretrained HF model.
 
-        Args:
-            pretrained (str): The name or path of the pretrained model.
-            revision (str): The revision of the model.
-            subfolder (Optional[str], optional): The subfolder within the model. Defaults to None.
-            max_memory (Optional[dict], optional): The maximum memory to allocate for the model per GPU. Defaults to None.
-            device_map (Optional[dict], optional): The device mapping for the model. Defaults to None.
-            torch_dtype (Optional[Union[str, torch.dtype]], optional): The torch data type for the model. Defaults to None.
-            quantization_config (Optional[Union[BitsAndBytesConfig, GPTQConfig]], optional): The quantization configuration for the model. Defaults to None.
-            trust_remote_code (bool, optional): Whether to trust remote code. Defaults to False.
-            cache_dir (str, optional): The cache directory for the model. Defaults to "/scratch".
+def _create_auto_model(self, config: vllm_model.VLLMModelConfig, env_config: EnvConfig) -> Optional[LLM]:  # type: ignore
+    """
+    Creates an instance of the pretrained HF model.
 
-        Returns:
-            transformers.PreTrainedModel: The created auto model instance.
-        """
-        self.model_args = {
-            "model": config.pretrained,
-            "gpu_memory_utilization": float(config.gpu_memory_utilization),
-            "revision": config.revision + (f"/{config.subfolder}" if config.subfolder is not None else ""),
-            "dtype": config.dtype,
-            "trust_remote_code": config.trust_remote_code,
-            "tensor_parallel_size": int(config.tensor_parallel_size),
-            "pipeline_parallel_size": int(config.pipeline_parallel_size),
-            "max_model_len": self._max_length,
-            "swap_space": 4,
-            "seed": config.seed,
-            "enforce_eager": config.enforce_eager,
-            "enable_prefix_caching": config.enable_prefix_caching,
-            "enable_chunked_prefill": config.enable_chunked_prefill,
-        }
-        if int(config.data_parallel_size) > 1:
-            self.model_args["distributed_executor_backend"] = "ray"
-            self._batch_size = "auto"
-            return None
+    Args:
+        pretrained (str): The name or path of the pretrained model.
+        revision (str): The revision of the model.
+        subfolder (Optional[str], optional): The subfolder within the model. Defaults to None.
+        max_memory (Optional[dict], optional): The maximum memory to allocate for the model per GPU. Defaults to None.
+        device_map (Optional[dict], optional): The device mapping for the model. Defaults to None.
+        torch_dtype (Optional[Union[str, torch.dtype]], optional): The torch data type for the model. Defaults to None.
+        quantization_config (Optional[Union[BitsAndBytesConfig, GPTQConfig]], optional): The quantization configuration for the model. Defaults to None.
+        trust_remote_code (bool, optional): Whether to trust remote code. Defaults to False.
+        cache_dir (str, optional): The cache directory for the model. Defaults to "/scratch".
 
-        model = LLM(**self.model_args)
+    Returns:
+        transformers.PreTrainedModel: The created auto model instance.
+    """
+    self.model_args = {
+        "model": config.pretrained,
+        "gpu_memory_utilization": float(config.gpu_memory_utilization),
+        "revision": config.revision
+        + (f"/{config.subfolder}" if config.subfolder is not None else ""),
+        "dtype": config.dtype,
+        "trust_remote_code": config.trust_remote_code,
+        "tensor_parallel_size": int(config.tensor_parallel_size),
+        "pipeline_parallel_size": int(config.pipeline_parallel_size),
+        "max_model_len": self._max_length,
+        "swap_space": 4,
+        "seed": config.seed,
+        "enforce_eager": config.enforce_eager,
+        "enable_prefix_caching": config.enable_prefix_caching,
+        "enable_chunked_prefill": config.enable_chunked_prefill,
+    }
+    if int(config.data_parallel_size) > 1:
+        self.model_args["distributed_executor_backend"] = "ray"
+        self._batch_size = "auto"
+        return None
 
-        # If the max_length can't get extracted from the config, it will be inferred from the model
-        # Inferring from the tokenizer will cause vllm to bug for models with mismatches between model
-        # config and tk config, like mistralai/Mistral-7B-v0.1
-        if self._max_length is None:
-            self._max_length = model.llm_engine.model_config.max_seq_len_to_capture
+    model = LLM(**self.model_args)
 
-        return model
+    # If the max_length can't get extracted from the config, it will be inferred from the model
+    # Inferring from the tokenizer will cause vllm to bug for models with mismatches between model
+    # config and tk config, like mistralai/Mistral-7B-v0.1
+    if self._max_length is None:
+        self._max_length = model.llm_engine.model_config.max_seq_len_to_capture
+
+    return model
+
 
 def greedy_until(
     self,
