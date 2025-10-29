@@ -8,6 +8,12 @@ model_path=$1
 seed=$2
 datasets="${@:3}"
 
+if [ -z "$datasets" ]; then
+    datasets=("AIME-2024" "AIME-2025" "GPQA-Diamond" "MMLU-PRO")
+else
+    datasets=($datasets)
+fi
+
 function test_if_missing() {
     pip freeze | grep $1 > /dev/null || (echo "missing $1"; exit 1)
 }
@@ -16,12 +22,6 @@ test_if_missing transformers==4.55.2
 test_if_missing vllm==0.10.1
 test_if_missing lighteval==0.8.1
 test_if_missing datasets==3.6.0
-
-if [ -z "$datasets" ]; then
-    datasets=("AIME-2024" "AIME-2025" "GPQA-Diamond" "GSM8K" "MMLU-PRO")
-else
-    datasets=($datasets)
-fi
 
 for dataset in "${datasets[@]}"; do 
     echo "Task: $dataset"
