@@ -10,17 +10,17 @@ from transformers import (
     AutoModelForCausalLM,
     Qwen2Config,
 )
-from paroquant_inference_engine.model_executor.models.cache_utils import StaticCache
+from inference_engine.model_executor.models.cache_utils import StaticCache
 import os
 
 torch.set_grad_enabled(False)
 
-from paroquant_inference_engine.model_executor.models.llama import LlamaForCausalLM
-from paroquant_inference_engine.model_executor.models.qwen3 import Qwen3ForCausalLM
-from paroquant_inference_engine.model_executor.models.qwen3_fp16 import (
+from inference_engine.model_executor.models.llama import LlamaForCausalLM
+from inference_engine.model_executor.models.qwen3 import Qwen3ForCausalLM
+from inference_engine.model_executor.models.qwen3_fp16 import (
     Qwen3ForCausalLMFP16,
 )
-from paroquant_inference_engine.model_executor.models.llama_fp16 import (
+from inference_engine.model_executor.models.llama_fp16 import (
     LlamaForCausalLMFP16,
 )
 import gc

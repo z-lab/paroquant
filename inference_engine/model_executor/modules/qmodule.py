@@ -3,7 +3,7 @@
 import math
 import torch
 import torch.nn as nn
-import paroquant_inference_engine.model_executor.modules.gemv_op
+import inference_engine.model_executor.modules.gemv_op
 from paroquant_kernels import gemm_forward_cuda_new
 
 

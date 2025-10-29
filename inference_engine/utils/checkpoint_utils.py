@@ -1,6 +1,6 @@
 from transformers import AutoModelForCausalLM
 import torch
-from paroquant_inference_engine.model_executor.modules.rotation_linear import (
+from inference_engine.model_executor.modules.rotation_linear import (
     RotateLinearInt4,
     RotateLinearMarlinInt4,
 )

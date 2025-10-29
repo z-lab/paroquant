@@ -1,7 +1,7 @@
 import torch, torch.nn as nn
-from paroquant_inference_engine.model_executor.modules.qmodule import WQLinear
-from paroquant_inference_engine.utils.rotation_utils import rotate_tensor, quantizer
-from paroquant_inference_engine.utils.quantization_utils import pseudo_quantize_tensor
+from inference_engine.model_executor.modules.qmodule import WQLinear
+from inference_engine.utils.rotation_utils import rotate_tensor, quantizer
+from inference_engine.utils.quantization_utils import pseudo_quantize_tensor
 
 
 class Rotation(nn.Module):

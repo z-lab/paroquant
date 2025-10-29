@@ -2,7 +2,7 @@ import torch
 import gc
 import torch.nn as nn
 from .quantization_utils import pseudo_quantize_tensor
-from paroquant_inference_engine.model_executor.modules.qmodule import WQLinear
+from inference_engine.model_executor.modules.qmodule import WQLinear
 
 
 def apply_rotation_step(
