@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import simple_parsing
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from tqdm import tqdm
 from pathlib import Path
 import json
@@ -58,6 +58,8 @@ class Config:
     n_bit: int
     # Number of rotations.
     num_rotations: int
+
+    skipped_modules: list[str] = field(default_factory=list)
 
     # Calibration datasets. If more than one dataset is provided,
     # they will be sampled evenly and shuffled.
@@ -199,7 +201,7 @@ def main():
     for layer_idx, layer in enumerate(tqdm(blocks)):
         empty_cache()
         logger.info(f"Capturing original layer output...")
-        # Original output of this layer..
+        # Original output of this layer.
         og_layer_output_batches = forward_layer_batch(
             layer, og_layer_input_batches, kwargs, store_device="cpu"
         )
@@ -237,7 +239,7 @@ def main():
             for name in linear_modules.keys():
                 file_name = f"{layer_idx}.{name}.pt"
                 file_path = output_dir / file_name
-                if not file_path.exists():
+                if not file_path.exists() and name not in args.skipped_modules:
                     all_files_exist = False
                     break
         else:
@@ -247,6 +249,9 @@ def main():
             logger.info(f"Initializing rotation parameters...")
 
         for name, old_module in linear_modules.items():
+            if name in args.skipped_modules:
+                continue
+
             if all_files_exist:
                 existing_result_file = output_dir / f"{layer_idx}.{name}.pt"
                 sd = torch.load(existing_result_file, map_location=device)
