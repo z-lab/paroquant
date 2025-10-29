@@ -63,7 +63,7 @@ python scripts/interactive_gen.py --hf-path <path_to_quantized_model>
 
 To load real-quantized models with huggingface:
 
-```
+```python
 # for LLaMA
 from inference_engine.model_executor.models.llama import LlamaForCausalLM
 model = LlamaForCausalLM.from_pretrained("path/to/quantized/model")
