@@ -3,6 +3,11 @@ set -e
 export PYTHONPATH=$(pwd)
 
 model_path=meta-llama/Meta-Llama-3-8B
+shards=$1
+
+if [ -z $shards ]; then
+    shards=1
+fi
 
 python3 optimize.py \
     --model $model_path \

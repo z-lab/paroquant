@@ -6,7 +6,7 @@ import os
 
 plt.style.use("ggplot")
 
-if shutil.which("latex") and not os.environ.get("NO_LATEX", False):
+if shutil.which("latex") and not int(os.environ.get("NO_LATEX", "0")) == 1:
     print("Using LaTeX...")
     plt.rcParams.update(
         {
