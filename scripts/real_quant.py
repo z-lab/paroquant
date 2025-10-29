@@ -1,5 +1,6 @@
 from inference_engine.utils.checkpoint_utils import from_pt_to_ckpt
 import argparse
+from transformers import AutoTokenizer
 
 
 if __name__ == "__main__":
@@ -19,3 +20,5 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     from_pt_to_ckpt(args.model, args.result_dir, args.output_path)
+    tokenizer = AutoTokenizer.from_pretrained(args.model)
+    tokenizer.save_pretrained(args.output_path)
