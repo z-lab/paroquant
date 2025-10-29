@@ -1,9 +1,6 @@
 from transformers import AutoModelForCausalLM
 import torch
-from inference_engine.model_executor.modules.rotation_linear import (
-    RotateLinearInt4,
-    RotateLinearMarlinInt4,
-)
+from inference_engine.model_executor.modules.rotation_linear import RotateLinearInt4
 import torch.nn as nn
 from typing import Iterator, Tuple, Union, Optional
 from collections.abc import Generator
