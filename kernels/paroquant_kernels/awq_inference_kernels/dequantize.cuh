@@ -10,6 +10,7 @@ Shang and Dang, Xingyu and Han, Song}, journal={arXiv}, year={2023}
 */
 #include <cuda_bf16.h>
 #include <cuda_fp16.h>
+#include <stdint.h>
 #pragma once
 
 template <typename T = half>
