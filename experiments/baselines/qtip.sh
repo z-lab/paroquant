@@ -1,24 +1,25 @@
 #!/usr/bin/env bash
-# https://github.com/OpenGVLab/OmniQuant
-# Commit: 95fae1bd00eaa60d03a20eb39c76c4cb173f51f7
-
 set -e
 
-# Model path is one of models from
-# https://huggingface.co/collections/relaxml/qtip-quantized-models-66fa253ad3186746f4b62803
 model_path="$1"
 seqlen="$2"
-project_dir=baselines/qtip
+baseline_dir=paroquant-baselines
+project_dir=$baseline_dir/qtip
 
-if [[ ! -d ./baselines ]]; then
-    mkdir -p ./baselines
+if [[ ! -d $baseline_dir ]]; then
+    git clone https://github.com/liang2kl/paroquant-baselines $baseline_dir
 fi
 
-if [[ ! -d $project_dir ]]; then
-    git clone https://github.com/Cornell-RelaxML/qtip $project_dir
-fi
+export PYTHONPATH=$project_dir
 
-PYTHONPATH=$project_dir python $project_dir/eval/eval_ppl.py \
-    --hf_path $model_path  \
-    --seed 0 \
-    --seqlen $seqlen
+(cd $project_dir && ./train.sh $model_path)
+(cd $project_dir && ./train_e2e.sh $model_path)
+
+# Convert to pseudo quant
+# model_name=$(echo $model_path | awk -F'/' '{print $2}')
+# (
+#     cd $project_dir &&
+#     python3 scripts/convert_to_pseudo_fp16.py \
+#         --hf_path $project_dir/output/e2e_models/${model_name}_QTIP \
+#         --output_path $project_dir/output/pseudo_models/$model_name
+# )

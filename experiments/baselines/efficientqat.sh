@@ -1,7 +1,4 @@
 #!/usr/bin/env bash
-# https://github.com/OpenGVLab/OmniQuant
-# Commit: 95fae1bd00eaa60d03a20eb39c76c4cb173f51f7
-
 set -e
 
 model_path="$1"
@@ -10,17 +7,24 @@ model_name_wo_hf="${model_name%-hf}"
 
 bits="$2"
 seqlen="$3"
-project_dir=baselines/EfficientQAT
+baseline_dir=paroquant-baselines
+project_dir=$baseline_dir/EfficientQAT
 
-if [[ ! -d ./baselines ]]; then
-    mkdir -p ./baselines
+if [[ ! -d $baseline_dir ]]; then
+    git clone https://github.com/liang2kl/paroquant-baselines $baseline_dir
 fi
 
-if [[ ! -d $project_dir ]]; then
-    git clone https://github.com/OpenGVLab/EfficientQAT $project_dir
-fi
+conda env list | grep efficientqat > /dev/null || conda create -n efficientqat python==3.11 -y
 
-PYTHONPATH=$project_dir python $project_dir/main_block_ap.py \
+function run_conda_cmd() {
+    conda run -n efficientqat --live-stream "$@"
+}
+
+export PYTHONPATH=$project_dir
+
+run_conda_cmd pip install -r $project_dir/requirements.txt
+
+run_conda_cmd python $project_dir/main_block_ap.py \
     --model $model_path  \
     --output_dir $project_dir/output/block_ap_log/$model_name \
     --wbits $bits \
@@ -31,3 +35,10 @@ PYTHONPATH=$project_dir python $project_dir/main_block_ap.py \
     --eval_ppl \
     --ppl_seqlen $seqlen \
     --save_quant_dir $project_dir/output/block_ap_models/$model_name \
+
+# Convert to pseudo quant
+# run_conda_cmd python $project_dir/model_transfer/real_to_fake.py \
+#     --model $project_dir/output/block_ap_models/$model_name \
+#     --save_dir $project_dir/output/pseudo_models/$model_name \
+#     --wbits $bits \
+#     --group_size 128
