@@ -76,5 +76,5 @@ PYTHONPATH=$project_dir torchrun --nnodes=1 --nproc_per_node=1 $project_dir/ptq.
     --k_groupsize 128 \
     --v_groupsize 128 \
     --rotate \
-    --optimized_rotation_path $cache_dir/13b/R.bin \
+    --optimized_rotation_path $rot_dir \
 

@@ -12,7 +12,7 @@ model_name=$(echo $model_path | awk -F'/' '{print $2}')
 
 project_dir=baselines/autoawq
 
-python experiments/ppl/autoawq_cli.py \
+python experiments/baselines/autoawq_cli.py \
     --hf_model_path $model_path \
     --quant_name $model_name-w$bits-g128-quant \
     --local_save_path $project_dir/awq_cache/$model_name-w$bits-g128-quant \
@@ -21,7 +21,6 @@ python experiments/ppl/autoawq_cli.py \
     --w_bit $bits
 
 python scripts/eval_ppl.py \
-    --tokenizer_path $1 \
-    --hf_path $project_dir/awq_cache/$model_name-w$bits-g128-quant \
+    --model $project_dir/awq_cache/$model_name-w$bits-g128-quant \
     --seed 0 \
     --seqlen $seqlen \

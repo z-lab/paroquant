@@ -7,6 +7,6 @@ seqlen="$2"
 project_dir=baselines/fp16
 
 python scripts/eval_ppl.py \
-    --hf_path $model_path \
+    --model $model_path \
     --seed 0 \
     --seqlen $seqlen \
