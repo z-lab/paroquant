@@ -10,6 +10,7 @@ from transformers import (
     AutoModelForCausalLM,
     Qwen2Config,
 )
+from torch.nn.attention import SDPBackend
 from inference_engine.model_executor.models.cache_utils import StaticCache
 import os
 
@@ -149,8 +150,8 @@ def generate(model, tokenizer, text, max_new_tokens, top_k, callback, past_kv):
     cache_position = torch.tensor([seq_length + 1], device=0)
     decode_time = time.time()
     for _ in range(1, max_new_tokens):
-        with torch.backends.cuda.sdp_kernel(
-            enable_flash=True, enable_mem_efficient=False, enable_math=True
+        with torch.nn.attention.sdpa_kernel(
+            backends=[SDPBackend.FLASH_ATTENTION, SDPBackend.MATH]
         ):
             next_token, logits = decode_one_tokens(
                 model, next_token.clone(), past_kv, cache_position
@@ -201,8 +202,8 @@ def benchmark(model, tokenizer, prefill_len, decode_len, past_kv):
     t0 = time.time()
 
     for t in range(1, decode_len):
-        with torch.backends.cuda.sdp_kernel(
-            enable_flash=True, enable_mem_efficient=False, enable_math=True
+        with torch.nn.attention.sdpa_kernel(
+            backends=[SDPBackend.FLASH_ATTENTION, SDPBackend.MATH]
         ):
             next_token, logits = decode_one_tokens(
                 model, next_token.clone(), past_kv, cache_position
