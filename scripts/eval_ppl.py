@@ -53,7 +53,7 @@ def get_test_tokens(name, seed, seqlen, tokenizer):
         raise ValueError(f"Unknown dataset {name}")
 
 
-def model_from_hf_path(path, device_map="auto"):
+def model_from_hf_path(path, device_map=None):
     model = transformers.AutoModelForCausalLM.from_pretrained(
         path,
         torch_dtype=torch.bfloat16,

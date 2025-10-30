@@ -29,7 +29,7 @@ To evaluate downstream tasks, use [`tasks/reasoning.sh`](./tasks/reasoning.sh) f
 To run non-reasoning tasks:
 
 ```
-./experiments/tasks/non_reasoning.py <model_path>
+./experiments/tasks/non_reasoning.sh <model_path>
 ```
 
 We use a separate environment for reasoning tasks. To run reasoning tasks:
@@ -37,7 +37,8 @@ We use a separate environment for reasoning tasks. To run reasoning tasks:
 ```
 conda env create -f ./experiments/tasks/reasoning/environment.yml
 conda activate paroquant-eval
-./experiments/tasks/reasoning.py <model_path> <seed> [<task0>, <task1>, ...]
+
+./experiments/tasks/reasoning.sh <model_path> <seed> [<task0>, <task1>, ...]
 ```
 
 The seeds we use in our paper are 42 for MMLU-Pro and 42, 0, 1 for other tasks.

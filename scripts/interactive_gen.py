@@ -1,4 +1,9 @@
 # This script is based off of the generation script in https://github.com/chu-tianxiang/QuIP-for-all
+import sys
+from pathlib import Path
+
+sys.path.append(str(Path(__file__).resolve().parents[1]))
+
 import time
 from typing import Optional
 
@@ -7,7 +12,6 @@ from transformers import (
     AutoTokenizer,
     AutoConfig,
     LlamaConfig,
-    AutoModelForCausalLM,
     Qwen2Config,
 )
 from torch.nn.attention import SDPBackend
@@ -81,6 +85,8 @@ def model_from_hf_path(path, empty_model=False):
         elif model_type == "qwen3":
             model_str = path
             model_cls = Qwen3ForCausalLMFP16
+        else:
+            raise Exception
     if empty_model:
         model = model_cls(bad_config)
         dtype = torch.float16
@@ -256,7 +262,10 @@ def main(hf_path, compile, interactive, max_tokens, top_k):
     ids, text, _ = generate(model, tokenizer, text, 16, top_k, callback, past_kv)
 
     while True:
-        prompt = input("What is your prompt? ")
+        try:
+            prompt = input("What is your prompt? ")
+        except (EOFError, KeyboardInterrupt):
+            break
         if prompt == "quit":
             exit()
         if tokenizer.chat_template is not None:
@@ -326,7 +335,7 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(description="Your CLI description.")
 
-    parser.add_argument("--hf-path", type=str, help="Path to checkpoint")
+    parser.add_argument("--model", type=str, help="Path to checkpoint")
     parser.add_argument(
         "--streaming", action="store_true", help="Whether to launch in stream mode"
     )
@@ -360,10 +369,10 @@ if __name__ == "__main__":
     if not args.disable_tf32:
         torch.set_float32_matmul_precision("high")
     if args.empty_model or args.bench_model:
-        bench_model(args.hf_path, args.prefill_len, args.decode_len, args.empty_model)
+        bench_model(args.model, args.prefill_len, args.decode_len, args.empty_model)
     else:
         main(
-            args.hf_path,
+            args.model,
             not args.no_compile,
             args.streaming,
             args.max_new_tokens,
