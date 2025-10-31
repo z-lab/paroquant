@@ -101,7 +101,7 @@ def optimize_module(
     train_input_batches, train_output_batches = train_set_batches
     val_input_batches, val_output_batches = val_set_batches
 
-    total_steps = n_iter * len(list(train_input_batches))
+    total_steps = n_iter * len(train_input_batches)
     schedulers = [
         CosineAnnealingParam(
             start_value=param_group["lr"],
