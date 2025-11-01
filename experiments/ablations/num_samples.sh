@@ -9,7 +9,7 @@ if [ -z $shards ]; then
     shards=1
 fi
 
-for size in 128 512 2048; do
+for size in 128 512; do
     python3 optimize.py \
         --model $model_path \
         --params "channel_scales:0.05,angles:0.05" "weight:1e-5,quantizer:1e-6" \

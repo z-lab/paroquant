@@ -11,8 +11,8 @@ fi
 
 python3 optimize.py \
     --model $model_path \
-    --params "channel_scales:0.05" \
-    --epochs 10 \
+    --params "channel_scales:0.05" "weight:1e-5,quantizer:1e-6" \
+    --epochs 10 10 \
     --group-size 128 \
     --n-bit 4 \
     --num-rotations 1 \
@@ -23,6 +23,6 @@ python3 optimize.py \
     --batch-size 16 \
     --seqlen 2048 \
     --cache-shards $shards \
-    --output-dir ./output/ablations/scaling-only \
+    --output-dir ./output/ablations/no-rotation \
     --resume \
     --seed 0

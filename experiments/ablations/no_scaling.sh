@@ -11,11 +11,11 @@ fi
 
 python3 optimize.py \
     --model $model_path \
-    --params "channel_scales:0.05" \
-    --epochs 10 \
+    --params "angles:0.05" "weight:1e-5,quantizer:1e-6" \
+    --epochs 10 10 \
     --group-size 128 \
     --n-bit 4 \
-    --num-rotations 1 \
+    --num-rotations 8 \
     --datasets wikitext2 c4 redpajama \
     --val-dataset pileval \
     --train-size 2048 \
@@ -23,6 +23,6 @@ python3 optimize.py \
     --batch-size 16 \
     --seqlen 2048 \
     --cache-shards $shards \
-    --output-dir ./output/ablations/scaling-only \
+    --output-dir ./output/ablations/no-scaling \
     --resume \
     --seed 0
