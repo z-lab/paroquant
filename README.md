@@ -50,7 +50,7 @@ python3 scripts/real_quant.py \
     --output-dir models/Qwen3-8B-PARO
 ```
 
-Pseudo-quantized models can be loaded directly with huggingface. To load real-quantized models with huggingface:
+Pseudo-quantized models can be loaded directly with `transformers`. To load real-quantized models with `transformers`:
 
 ```python
 # for LLaMA
@@ -62,10 +62,10 @@ from inference_engine.model_executor.models.qwen3 import Qwen3ForCausalLM
 model = Qwen3ForCausalLM.from_pretrained("/path/to/quantized/model")
 ```
 
-You can also interact with the quantized models directly:
+You can also try out the quantized models interactively:
 
 ```sh
-python3 scripts/interactive_gen.py --model /path/to/quantized/morel --streaming
+python3 scripts/interactive_gen.py --model /path/to/quantized/model --streaming
 ```
 
 ## Models
@@ -99,7 +99,7 @@ In the [`experiments`](./experiments/) directory, we provide the original script
 
 ## Contribution
 
-Contributions are welcome! Please install `pre-commit` to ensure consistent code styles before commiting any changes:
+Contributions are welcome! Please install `pre-commit` to ensure consistent code styles:
 
 ```bash
 pip install pre-commit
