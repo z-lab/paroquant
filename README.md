@@ -4,7 +4,7 @@
 
 ParoQuant is an efficient 4-bit weight-only quantization method that achieves state-of-the-art quantization accuracy while incurring minimal overhead during inference. It currently supports LLaMA and Qwen3 model family.
 
-![ParoQuant Method Diagram](./assets/method.svg)
+<img style="width:100%" src="assets/method.svg" alt="ParoQuant Method Diagram">
 
 ## Setup
 
