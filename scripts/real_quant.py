@@ -1,4 +1,3 @@
-from inference_engine.utils.checkpoint_utils import from_pt_to_ckpt
 import argparse
 from transformers import AutoTokenizer
 import sys
@@ -6,6 +5,7 @@ from pathlib import Path
 
 sys.path.append(Path(__file__).parents[1].as_posix())
 
+from inference_engine.utils.checkpoint_utils import from_pt_to_ckpt
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(

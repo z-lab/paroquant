@@ -43,13 +43,13 @@ Then, create a huggingface model with pseudo quantization (*i.e.,* model weights
 python3 scripts/pseudo_quant.py \
     --model Qwen/Qwen3-8B \
     --result-dir output/Qwen3-8B \
-    --output-dir models/Qwen3-8B-PARO-pseudo
+    --output-path models/Qwen3-8B-PARO-pseudo
 
 # real quantization
 python3 scripts/real_quant.py \
     --model Qwen/Qwen3-8B \
     --result-dir output/Qwen3-8B \
-    --output-dir models/Qwen3-8B-PARO
+    --output-path models/Qwen3-8B-PARO
 ```
 
 Pseudo-quantized models can be loaded directly with `transformers`. To load real-quantized models with `transformers`:
