@@ -65,16 +65,10 @@ def model_from_hf_path(path, empty_model=False):
     model_type = bad_config.model_type
     if is_quantized or empty_model:
         if model_type == "llama":
-            if not empty_model:
-                model_str = LlamaConfig.from_pretrained(path).orig_model_name
-            else:
-                model_str = path
+            model_str = path
             model_cls = LlamaForCausalLM
         elif model_type == "qwen3":
-            if not empty_model:
-                model_str = Qwen2Config.from_pretrained(path).orig_model_name
-            else:
-                model_str = path
+            model_str = path
             model_cls = Qwen3ForCausalLM
         else:
             raise Exception
