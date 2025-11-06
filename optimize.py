@@ -276,11 +276,11 @@ def main():
             )
 
             all_pairs = [
-                torch.tensor(pairs, device=device, dtype=torch.int32)
+                torch.tensor(pairs, device="cpu", dtype=torch.int32)
                 for pairs in all_pairs
             ]
             initial_angles = [
-                torch.zeros(pairs.shape[0], device=device) for pairs in all_pairs
+                torch.zeros(pairs.shape[0], device="cpu") for pairs in all_pairs
             ]
             initial_scales = torch.ones(
                 1, weight.shape[1], dtype=torch.float16, device=device
@@ -291,6 +291,9 @@ def main():
                 initial_angles,
                 group_size=args.group_size,
             )
+            npairs = npairs.to(device)
+            angles = angles.to(device)
+            mask = mask.to(device)
             rotation_pairs = [npairs, angles, mask]
             channel_scales = initial_scales
 
