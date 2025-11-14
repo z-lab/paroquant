@@ -1,6 +1,6 @@
 # ParoQuant: Pairwise Rotation Quantization for Efficient Reasoning LLM Inference
 
-[Paper]() | [Models](https://huggingface.co/collections/z-lab/paroquant)
+[Paper](https://arxiv.org/abs/2511.10645) | [Models](https://huggingface.co/collections/z-lab/paroquant)
 
 ParoQuant is an efficient 4-bit weight-only quantization method that achieves state-of-the-art quantization accuracy while incurring minimal overhead during inference. It currently supports LLaMA and Qwen3 model family.
 
@@ -74,8 +74,8 @@ python3 scripts/interactive_gen.py --model /path/to/quantized/model --streaming
 
 We provide pre-quantized 4-bit ParoQuant models listed below. These are real-quantized models and can be loaded with the method described above.
 
-| Model                        | Hugging Face Path                                                                                         |
-| ---------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Model                        | Hugging Face Path                                                                                           |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------- |
 | Meta-Llama-3-8B              | [`z-lab/Meta-Llama-3-8B-PARO`](https://huggingface.co/z-lab/Meta-Llama-3-8B-PARO)                           |
 | Meta-Llama-3-70B             | [`z-lab/Meta-Llama-3-70B-PARO`](https://huggingface.co/z-lab/Meta-Llama-3-70B-PARO)                         |
 | Llama-3.1-8B-Instruct        | [`z-lab/Llama-3.1-8B-Instruct-PARO`](https://huggingface.co/z-lab/Llama-3.1-8B-Instruct-PARO)               |
