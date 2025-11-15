@@ -160,7 +160,7 @@ def get_calib_dataset(
     elif data == "redpajama":
         test_split, val_split = 0.2, 0.1
         dataset = load_dataset(
-            "togethercomputer/RedPajama-Data-1T-Sample",
+            "liang2kl/RedPajama-Data-1T-Sample-Backup",
             split="train",
             trust_remote_code=True,
         )
