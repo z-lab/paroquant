@@ -108,4 +108,15 @@ pip install pre-commit
 pre-commit install
 ```
 
-## Citation
+## Reference
+
+If you find ParoQuant useful or relevant to your research, please kindly cite our paper:
+
+```
+@article{liang2025paroquant,
+  title={ParoQuant: Pairwise Rotation Quantization for Efficient Reasoning LLM Inference},
+  author={Liang, Yesheng and Chen, Haisheng and Han, Song and Liu, Zhijian},
+  journal={arXiv preprint arXiv:2511.10645},
+  year={2025}
+}
+```
