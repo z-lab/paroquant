@@ -5,7 +5,7 @@ from . import _C
 
 
 @torch.library.register_fake("rotation::rotate")
-def _fake_kernel(x, idx_ij, theta, scales):
+def _fake_kernel(x, idx_ij, theta, scales, group_size=128):
     return torch.empty_like(x)
 
 
