@@ -5,6 +5,7 @@
 #include <cuda_fp16.h>
 #include <cuda_pipeline_primitives.h>
 #include <torch/extension.h>
+#include <ATen/cuda/CUDAContext.h>
 
 #define kInterleave 4
 #define OP_M 16
@@ -51,8 +52,9 @@
   cudaFuncSetAttribute(kernel_func,                                            \
                        cudaFuncAttributeMaxDynamicSharedMemorySize,            \
                        kSmemByteSize);                                         \
-  kernel_func<<<num_blocks, threads_per_block, kSmemByteSize>>>(               \
-      in_feats, kernel, scales, zeros, out_feats, semaphores, num_in_feats,    \
+  const cudaStream_t stream = at::cuda::getCurrentCUDAStream();              \
+  kernel_func<<<num_blocks, threads_per_block, kSmemByteSize, stream>>>(      \
+      in_feats, kernel, scales, zeros, out_feats, semaphores, num_in_feats,   \
       num_out_channels, num_in_channels);
 
 template <int N> __inline__ __host__ __device__ int get_log_tile(int n) {
@@ -1396,7 +1398,8 @@ torch::Tensor gemm_forward_cuda_new(torch::Tensor _in_feats,
       cudaFuncSetAttribute(kernel_func,
                            cudaFuncAttributeMaxDynamicSharedMemorySize,
                            kSmemByteSize);
-      kernel_func<<<num_blocks, threads_per_block, kSmemByteSize>>>(
+      const cudaStream_t stream = at::cuda::getCurrentCUDAStream();
+      kernel_func<<<num_blocks, threads_per_block, kSmemByteSize, stream>>>(
           in_feats, kernel, scales, zeros, out_feats, num_in_feats,
           num_out_channels, num_in_channels);
     }

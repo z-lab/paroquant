@@ -4,7 +4,8 @@ import math
 import torch
 import torch.nn as nn
 import inference_engine.model_executor.modules.gemv_op
-from paroquant_kernels import gemm_forward_cuda_new
+import inference_engine.model_executor.modules.gemm_op
+
 
 
 def make_divisible(c, divisor):
@@ -207,11 +208,16 @@ class WQLinear(nn.Module):
                 self.group_size,
                 self.interleave,
             )
-
         else:
-            out = gemm_forward_cuda_new(
-                inputs, self.qweight, self.scales, self.scaled_zeros
-            )
+            out = torch.ops.awq.gemm(
+            inputs,
+            self.qweight,
+            self.scales,
+            self.scaled_zeros,
+            self.interleave,
+        )
+    
+
         out = out + self.bias if self.bias is not None else out
         # print(out)
         # assert 0
