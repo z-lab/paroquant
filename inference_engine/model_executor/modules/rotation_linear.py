@@ -122,3 +122,18 @@ class RotateLinearInt4(nn.Module):
         x = self.rotation(x)
         x = self.qlinear(x)
         return x
+    
+    def buffer_name(self, buffer_name: str):
+        if buffer_name == "qlinear.qweight":
+            return self.qlinear.qweight
+        elif buffer_name == "qlinear.scaled_zeros":
+            return self.qlinear.scaled_zeros
+        elif buffer_name == "qlinear.scales":
+            return self.qlinear.scales
+        elif buffer_name == "rotation.theta":
+            return self.rotation.theta
+        elif buffer_name == "rotation.pairs":
+            return self.rotation.pairs
+        elif buffer_name == "rotation.channel_scales":
+            return self.rotation.channel_scales
+        raise ValueError(f"Invalid buffer name: {buffer_name}")
