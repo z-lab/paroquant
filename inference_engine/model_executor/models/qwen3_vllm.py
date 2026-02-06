@@ -436,10 +436,7 @@ class Qwen3ParoForCausalLM(nn.Module, SupportsLoRA, SupportsPP, SupportsEagle3):
                                    inputs_embeds)
         return hidden_states
 
-    def compute_logits(
-        self,
-        hidden_states: torch.Tensor,
-    ) -> Optional[torch.Tensor]:
+    def compute_logits(self, hidden_states: torch.Tensor, _) -> Optional[torch.Tensor]:
         logits = self.logits_processor(self.lm_head, hidden_states)
         return logits
 

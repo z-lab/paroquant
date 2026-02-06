@@ -1,5 +1,6 @@
 import asyncio
 import time
+import argparse
 
 from vllm import AsyncLLMEngine, AsyncEngineArgs, SamplingParams
 from vllm import ModelRegistry
@@ -14,20 +15,21 @@ from inference_engine.model_executor.models.qwen3_vllm import Qwen3ParoForCausal
 ModelRegistry.register_model("Qwen3ParoForCausalLM", Qwen3ParoForCausalLM)
 
 
-def _make_engine_args() -> AsyncEngineArgs:
-    model_path = "./Qwen3-8B-PARO"
-    hf_overrides = {"architectures": ["Qwen3ParoForCausalLM"]}
+def _make_engine_args(model: str) -> AsyncEngineArgs:
+    if "PARO" in model.upper():
+        hf_overrides = {"architectures": ["Qwen3ParoForCausalLM"]}
+    else:
+        hf_overrides = {}
 
     return AsyncEngineArgs(
-        model=model_path,
-        trust_remote_code=True,
+        model=model,
         hf_overrides=hf_overrides,
         compilation_config={},
     )
 
 
-async def run_demo():
-    engine_args = _make_engine_args()
+async def run_demo(model: str):
+    engine_args = _make_engine_args(model)
     engine = AsyncLLMEngine.from_engine_args(engine_args)
 
     sampling_params = SamplingParams(
@@ -79,4 +81,12 @@ async def run_demo():
 
 
 if __name__ == "__main__":
-    asyncio.run(run_demo())
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--model",
+        type=str,
+        required=True,
+        help="Path to the model directory or model identifier from Hugging Face Hub.",
+    )
+    args = parser.parse_args()
+    asyncio.run(run_demo(args.model))
