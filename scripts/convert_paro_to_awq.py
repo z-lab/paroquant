@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import argparse
+import json
 import shutil
 from pathlib import Path
 from typing import Dict, Tuple
@@ -30,7 +31,7 @@ def pack_cols(
 def unpack_awq_llm_qweight(
     qweight: torch.Tensor, interleave: int, kstride: int
 ) -> torch.Tensor:
-    # qweight: (out_features // interleave, in_features // int16_pack_num * interleave)
+    """Inverse of qmodule.pack_intweight for AWQ-LLM int16 layout."""
     q = qweight.cpu().numpy().astype(np.uint16)
     n_div, k = q.shape
 
@@ -38,16 +39,21 @@ def unpack_awq_llm_qweight(
     v1 = (q >> 4) & 0xF
     v2 = (q >> 8) & 0xF
     v3 = (q >> 12) & 0xF
-    packed = np.stack([v0, v1, v2, v3], axis=-1)
+    packed = np.stack([v0, v1, v2, v3], axis=-1)  # (n_div, k, 4)
 
+    # Undo interleaving (inverse of pack_intweight interleave block)
     packed = packed.reshape(n_div, k // kstride, kstride, interleave)
-    packed = packed.transpose(0, 3, 1, 2)
+    packed = packed.reshape(n_div, k // kstride, interleave, kstride)
+    packed = packed.transpose(0, 2, 1, 3)
     packed = packed.reshape(n_div * interleave, k)
 
+    # Undo 8-weight reordering (inverse of pack_intweight step C)
     packed = packed.reshape(n_div * interleave, k // 32, 4, 2, 4)
     packed = packed.transpose(0, 1, 2, 4, 3)
     packed = packed.reshape(n_div * interleave, k // 32, 4, 8)
+    packed = packed.reshape(n_div * interleave, k)
 
+    # Undo 32-weight permutation (inverse of pack_intweight step B)
     packed = packed.reshape(n_div * interleave, k // 32, 4, 4, 2)
     packed = packed.transpose(0, 1, 3, 2, 4)
     packed = packed.reshape(n_div * interleave, k)
@@ -78,6 +84,16 @@ def convert_one_module(
     num_groups = in_features // group_size
 
     unpacked = unpack_awq_llm_qweight(qweight, interleave=interleave, kstride=kstride)
+    # AutoAWQ uses interleaved ordering on the output dimension.
+    if w_bit == 4:
+        interleave = torch.tensor([0, 2, 4, 6, 1, 3, 5, 7], device=unpacked.device)
+    elif w_bit == 8:
+        interleave = torch.tensor([0, 2, 1, 3], device=unpacked.device)
+    else:
+        raise ValueError(f"Unsupported w_bit: {w_bit}")
+    unpacked = unpacked.view(out_features // interleave.numel(), interleave.numel(), -1)
+    unpacked = unpacked[:, interleave, :].reshape(out_features, in_features)
+
     qweight_awq = pack_cols(
         unpacked.transpose(0, 1).contiguous(),
         num_bits=w_bit,
@@ -90,6 +106,16 @@ def convert_one_module(
 
     zeros = -scaled_zeros / scales
     zeros = torch.round(zeros).clamp_(0, 2**w_bit - 1).to(torch.int32)
+
+    # AutoAWQ uses interleaved ordering on the output dimension.
+    if w_bit == 4:
+        interleave = torch.tensor([0, 2, 4, 6, 1, 3, 5, 7], device=zeros.device)
+    elif w_bit == 8:
+        interleave = torch.tensor([0, 2, 1, 3], device=zeros.device)
+    else:
+        raise ValueError(f"Unsupported w_bit: {w_bit}")
+    zeros = zeros.view(num_groups, out_features // interleave.numel(), -1)
+    zeros = zeros[:, :, interleave].reshape(num_groups, out_features)
 
     qzeros = pack_cols(
         zeros.contiguous(),
@@ -186,6 +212,25 @@ def main() -> None:
             w_bit=args.w_bit,
             group_size=args.group_size,
         )
+
+    index_in = in_dir / "model.safetensors.index.json"
+    index_out = out_dir / "model.safetensors.index.json"
+    if index_in.exists():
+        with index_in.open("r", encoding="utf-8") as f:
+            index_data = json.load(f)
+
+        weight_map = index_data.get("weight_map", {})
+        updated_map = dict(weight_map)
+        for key, shard in weight_map.items():
+            if key.endswith("qlinear.scaled_zeros"):
+                new_key = key.replace("qlinear.scaled_zeros", "qlinear.qzeros")
+                updated_map[new_key] = shard
+                if key in updated_map:
+                    del updated_map[key]
+
+        index_data["weight_map"] = updated_map
+        with index_out.open("w", encoding="utf-8") as f:
+            json.dump(index_data, f, indent=2, sort_keys=True)
 
 
 if __name__ == "__main__":
