@@ -25,6 +25,8 @@ def _make_engine_args(model: str) -> AsyncEngineArgs:
         model=model,
         hf_overrides=hf_overrides,
         compilation_config={},
+        gpu_memory_utilization=0.1,
+        # quantization="awq",
     )
 
 

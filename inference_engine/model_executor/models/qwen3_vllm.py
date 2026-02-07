@@ -48,7 +48,9 @@ from vllm.model_executor.models.utils import AutoWeightsLoader, PPMissingLayer, 
 from vllm.model_executor.model_loader.weight_utils import (
     default_weight_loader, maybe_remap_kv_scale_name)
 
-from inference_engine.model_executor.modules.rotation_linear import RotateLinearInt4
+from inference_engine.model_executor.modules.rotation_linear import (
+    RotateLinearAWQMarlinInt4 as RotateLinearInt4,
+)
 
 logger = init_logger(__name__)
 
@@ -312,8 +314,8 @@ class Qwen3Model(Qwen2Model):
         points_to_buffers: dict[str, str] = {}
 
         for i in range(self.start_layer, self.end_layer):
-                layer = self.layers[i]
-                module_names = [
+            layer = self.layers[i]
+            module_names = [
                     "self_attn.q_proj",
                     "self_attn.k_proj",
                     "self_attn.v_proj",
@@ -323,25 +325,25 @@ class Qwen3Model(Qwen2Model):
                     "mlp.down_proj",
                 ]
 
-                buffer_names = [
-                    "qlinear.qweight",
-                    "qlinear.scaled_zeros",
-                    "qlinear.scales",
-                    "rotation.theta",
-                    "rotation.pairs",
-                    "rotation.channel_scales",
-                ]
+            buffer_names = [
+                "qlinear.qweight",
+                "qlinear.qzeros",
+                "qlinear.scales",
+                "rotation.theta",
+                "rotation.pairs",
+                "rotation.channel_scales",
+            ]
 
-                for module_name in module_names:
-                    parts = module_name.split(".")
-                    module = layer
-                    for part in parts:
-                        module = getattr(module, part)
+            for module_name in module_names:
+                parts = module_name.split(".")
+                module = layer
+                for part in parts:
+                    module = getattr(module, part)
 
-                    if isinstance(module, RotateLinearInt4):
-                        for buffer in buffer_names:
-                            param_name = f"layers.{i}.{module_name}.{buffer}"
-                            points_to_buffers[param_name] = module.buffer_name(buffer)
+                if isinstance(module, RotateLinearInt4):
+                    for buffer in buffer_names:
+                        param_name = f"layers.{i}.{module_name}.{buffer}"
+                        points_to_buffers[param_name] = module.buffer_name(buffer)
 
         for name, loaded_weight in weights:
             if "rotary_emb.inv_freq" in name:
@@ -366,19 +368,22 @@ class Qwen3Model(Qwen2Model):
                 continue
             if is_pp_missing_parameter(name, self):
                 continue
-        
+
             if name in points_to_buffers:
                 buffer_name = points_to_buffers[name]
                 loaded_weight = loaded_weight.to(device=buffer_name.device, dtype=buffer_name.dtype)
                 buffer_name.data.copy_(loaded_weight)
                 loaded_params.add(name)
                 continue
-            
+
             param = params_dict[name]
             weight_loader = getattr(param, "weight_loader",
                                     default_weight_loader)
             weight_loader(param, loaded_weight)
             loaded_params.add(name)
+        for _, module in self.named_modules():
+            if isinstance(module, RotateLinearInt4):
+                module.qlinear.convert_to_marlin()
         return loaded_params
 
 
