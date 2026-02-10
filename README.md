@@ -70,6 +70,21 @@ You can also try out the quantized models interactively:
 python3 scripts/interactive_gen.py --model /path/to/quantized/model --streaming
 ```
 
+For benchmarking generation of long sequences, please use vLLM for better CUDA Graphs support. We adopt Marlin kernels from vLLM, and thus you need to convert the format of ParoQuant-generated models first:
+
+```sh
+# install vllm
+pip install vllm==0.15.1
+# convert to AutoAWQ-style format
+python3 convert_paro_to_awq.py --input /path/to/quantized/model --output-dir /path/to/converted/model
+```
+
+Then, run the converted model with vLLM:
+
+```sh
+python3 interactive_gen_vllm.py --model /path/to/converted/model
+```
+
 ## Models
 
 We provide pre-quantized 4-bit ParoQuant models listed below. These are real-quantized models and can be loaded with the method described above.
