@@ -3,7 +3,7 @@ import time
 import argparse
 import json
 from typing import Optional
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, GenerationConfig
 
 from vllm import AsyncLLMEngine, AsyncEngineArgs, SamplingParams
 from vllm import ModelRegistry
@@ -39,9 +39,11 @@ async def run_demo(model: str, recording_output: Optional[str], max_tokens: int)
 
     tokenizer = AutoTokenizer.from_pretrained(model, trust_remote_code=True)
 
+    generation_config = GenerationConfig.from_pretrained(model)
     sampling_params = SamplingParams(
-        temperature=0.6,
-        top_p=0.95,
+        temperature=generation_config.temperature,
+        top_p=generation_config.top_p,
+        top_k=generation_config.top_k,
         max_tokens=max_tokens,
     )
 

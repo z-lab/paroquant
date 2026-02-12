@@ -1,6 +1,8 @@
 # ParoQuant: Pairwise Rotation Quantization for Efficient Reasoning LLM Inference
 
-[Paper](https://arxiv.org/abs/2511.10645) | [Models](https://huggingface.co/collections/z-lab/paroquant)
+[Paper](https://arxiv.org/abs/2511.10645) |
+[Blog](https://paroquant.z-lab.ai) |
+[Models](https://huggingface.co/collections/z-lab/paroquant)
 
 ParoQuant is an efficient 4-bit weight-only quantization method that achieves state-of-the-art quantization accuracy while incurring minimal overhead during inference. It currently supports LLaMA and Qwen3 model family.
 
@@ -21,19 +23,23 @@ Install dependencies:
 # use conda (recommended)
 conda env create -f environment.yml
 conda activate paroquant
-pip install ./kernels
+pip install ./kernels --no-build-isolation
 
 # or use pip
 pip install -r requirements.txt
-pip install ./kernels
+pip install ./kernels --no-build-isolation
 ```
 
+You may need to modify [`requirements.txt`](requirements.txt) to match your CUDA version.
+
 ## Usage
+
+### Optimization
 
 First, run the optimization script to obtain the optimized checkpoints. The checkpoints will be stored in `output/<model_name>`.
 
 ```bash
-./experiments/optimize/4bit.sh Qwen/Qwen3-8B
+experiments/optimize/4bit.sh Qwen/Qwen3-8B
 ```
 
 Then, create a huggingface model with pseudo quantization (*i.e.,* model weights are in FP16 simulating the quantization) or real quantization (*i.e.*, model weights are in INT4):
@@ -52,37 +58,44 @@ python3 scripts/real_quant.py \
     --output-path models/Qwen3-8B-PARO
 ```
 
+### Inference
+
+#### Transformers
+
 Pseudo-quantized models can be loaded directly with `transformers`. To load real-quantized models with `transformers`:
 
 ```python
 # for LLaMA
 from inference_engine.model_executor.models.llama import LlamaForCausalLM
-model = LlamaForCausalLM.from_pretrained("/path/to/quantized/model")
+model = LlamaForCausalLM.from_pretrained("z-lab/Llama-3.1-8B-Instruct-PARO")
 
 # for Qwen3
 from inference_engine.model_executor.models.qwen3 import Qwen3ForCausalLM
-model = Qwen3ForCausalLM.from_pretrained("/path/to/quantized/model")
+model = Qwen3ForCausalLM.from_pretrained("z-lab/Qwen3-8B-PARO")
 ```
 
 You can also try out the quantized models interactively:
 
 ```sh
-python3 scripts/interactive_gen.py --model /path/to/quantized/model --streaming
+python3 scripts/interactive_gen.py --model z-lab/Qwen3-8B-PARO --streaming
 ```
 
-For benchmarking generation of long sequences, please use vLLM for better CUDA Graphs support. We adopt Marlin kernels from vLLM, and thus you need to convert the format of ParoQuant-generated models first:
+#### vLLM
+
+For benchmarking generation of long sequences, please use vLLM for better CUDA Graphs support. We adopt the Marlin kernels from vLLM; therefore, you need to convert the format of ParoQuant-generated models first:
 
 ```sh
 # install vllm
 pip install vllm==0.15.1
+
 # convert to AutoAWQ-style format
-python3 convert_paro_to_awq.py --input /path/to/quantized/model --output-dir /path/to/converted/model
+python3 scripts/convert_paro_to_awq.py --input z-lab/Qwen3-8B-PARO --output-dir /path/to/converted/model
 ```
 
 Then, run the converted model with vLLM:
 
 ```sh
-python3 interactive_gen_vllm.py --model /path/to/converted/model
+python3 scripts/interactive_gen_vllm.py --model /path/to/converted/model
 ```
 
 ## Models
@@ -130,7 +143,7 @@ If you find ParoQuant useful or relevant to your research, please kindly cite ou
 ```
 @article{liang2025paroquant,
   title={ParoQuant: Pairwise Rotation Quantization for Efficient Reasoning LLM Inference},
-  author={Liang, Yesheng and Chen, Haisheng and Han, Song and Liu, Zhijian},
+  author={Liang, Yesheng and Chen, Haisheng and Zhang, Zihan and Han, Song and Liu, Zhijian},
   journal={arXiv preprint arXiv:2511.10645},
   year={2025}
 }
