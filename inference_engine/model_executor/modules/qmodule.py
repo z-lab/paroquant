@@ -7,7 +7,6 @@ import inference_engine.model_executor.modules.gemv_op
 import inference_engine.model_executor.modules.gemm_op
 
 
-
 def make_divisible(c, divisor):
     return (c + divisor - 1) // divisor
 
@@ -210,13 +209,12 @@ class WQLinear(nn.Module):
             )
         else:
             out = torch.ops.awq.gemm(
-            inputs,
-            self.qweight,
-            self.scales,
-            self.scaled_zeros,
-            self.interleave,
-        )
-    
+                inputs,
+                self.qweight,
+                self.scales,
+                self.scaled_zeros,
+                self.interleave,
+            )
 
         out = out + self.bias if self.bias is not None else out
         # print(out)

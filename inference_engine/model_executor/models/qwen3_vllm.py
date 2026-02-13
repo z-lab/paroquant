@@ -206,16 +206,16 @@ class Qwen3Attention(nn.Module):
         q = self.q_proj(hidden_states)
         k = self.k_proj(hidden_states)
         v = self.v_proj(hidden_states)
-        
+
         # Add qk-norm
         q_by_head = q.view(*q.shape[:-1], q.shape[-1] // self.head_dim, self.head_dim)
         q_by_head = self.q_norm(q_by_head)
         q = q_by_head.view(q.shape)
-        
+
         k_by_head = k.view(*k.shape[:-1], k.shape[-1] // self.head_dim, self.head_dim)
         k_by_head = self.k_norm(k_by_head)
         k = k_by_head.view(k.shape)
-        
+
         q, k = self.rotary_emb(positions, q, k)
         attn_output = self.attn(q, k, v)
         output = self.o_proj(attn_output)
@@ -233,7 +233,7 @@ class Qwen3DecoderLayer(nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
         set_default_rope_theta(config, default_theta=1000000)
-        
+
         dual_chunk_attention_config = getattr(
             config, "dual_chunk_attention_config", None
         )
@@ -249,7 +249,9 @@ class Qwen3DecoderLayer(nn.Module):
             num_heads=config.num_attention_heads,
             max_position=config.max_position_embeddings,
             num_kv_heads=config.num_key_value_heads,
-            rope_parameters=getattr(config, "rope_parameters", None), # Passed from config
+            rope_parameters=getattr(
+                config, "rope_parameters", None
+            ),  # Passed from config
             rms_norm_eps=config.rms_norm_eps,
             qkv_bias=getattr(config, "attention_bias", False),
             head_dim=getattr(config, "head_dim", None),
@@ -389,7 +391,7 @@ class Qwen3Model(Qwen2Model):
             weight_loader = getattr(param, "weight_loader", default_weight_loader)
             weight_loader(param, loaded_weight)
             loaded_params.add(name)
-            
+
         for _, module in self.named_modules():
             if isinstance(module, RotateLinearInt4):
                 module.qlinear.convert_to_marlin()
