@@ -141,10 +141,10 @@ pre-commit install
 If you find ParoQuant useful or relevant to your research, please kindly cite our paper:
 
 ```
-@article{liang2025paroquant,
-  title={ParoQuant: Pairwise Rotation Quantization for Efficient Reasoning LLM Inference},
-  author={Liang, Yesheng and Chen, Haisheng and Zhang, Zihan and Han, Song and Liu, Zhijian},
-  journal={arXiv preprint arXiv:2511.10645},
-  year={2025}
+@inproceedings{liang2026paroquant,
+  title     = {{ParoQuant: Pairwise Rotation Quantization for Efficient Reasoning LLM Inference}},
+  author    = {Liang, Yesheng and Chen, Haisheng and Zhang, Zihan and Han, Song and Liu, Zhijian},
+  booktitle = {International Conference on Learning Representations (ICLR)},
+  year      = {2026}
 }
 ```
