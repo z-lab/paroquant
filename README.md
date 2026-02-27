@@ -8,7 +8,25 @@ ParoQuant is an efficient 4-bit weight-only quantization method that achieves st
 
 <img style="width:100%" src="assets/method.svg" alt="ParoQuant Method Diagram">
 
+## Quick Start
+
+Try out ParoQuant with a single command:
+
+```
+docker run --rm -it --gpus all --ipc=host ghcr.io/z-lab/paroquant \
+    python scripts/interactive_gen.py --model z-lab/Qwen3-8B-PARO --streaming
+```
+
 ## Setup
+
+> [!NOTE]
+> You can use the docker image `ghcr.io/z-lab/paroquant` directly without manually setting up environment:
+> 
+> ```
+> docker run -it --gpus all --ipc=host ghcr.io/z-lab/paroquant
+> ```
+> 
+> Please follow the setup instructions below if you'd prefer running on the host.
 
 Clone this repository:
 
@@ -82,6 +100,8 @@ python3 scripts/interactive_gen.py --model z-lab/Qwen3-8B-PARO --streaming
 
 #### vLLM
 
+> The docker image for this environment is `ghcr.io/z-lab/paroquant:vllm`.
+
 For benchmarking generation of long sequences, please use vLLM for better CUDA Graphs support. We adopt the Marlin kernels from vLLM; therefore, you need to convert the format of ParoQuant-generated models first:
 
 ```sh
@@ -126,6 +146,20 @@ In addition, we provide the original checkpoints and pseudo-quantized models in 
 ## Reproduction
 
 In the [`experiments`](./experiments/) directory, we provide the original scripts that produce the models, experiment results, and figures in the paper. Please refer to the [README](./experiments/README.md) for more details.
+
+## Docker
+
+We provide three docker images for easy environment setup:
+
+- `ghcr.io/z-lab/paroquant`: for optimization and inference with Transformers backend
+- `ghcr.io/z-lab/paroquant:vllm`: for inference with vLLM backend
+- `ghcr.io/z-lab/paroquant:eval-reasoning`: for reasoning task evaluation
+
+Use the following command to create a container and activate an interactive shell:
+
+```
+docker run -it --gpus all --ipc=host ghcr.io/z-lab/paroquant:<tag>
+```
 
 ## Contribution
 

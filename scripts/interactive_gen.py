@@ -265,7 +265,7 @@ def main(hf_path, compile, interactive, max_tokens, top_k):
         if tokenizer.chat_template is not None:
             messages = [{"role": "user", "content": prompt}]
             text = tokenizer.apply_chat_template(
-                messages, tokenize=False, add_generation_prompt=True
+                messages, tokenize=False, add_generation_prompt=True, enable_thinking=False
             )
         else:
             text = prompt

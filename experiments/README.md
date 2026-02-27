@@ -2,6 +2,8 @@
 
 These are the scripts to reproduce most results in the paper. The environment for all the experiments (except for baselines and reasoning tasks) is provided in [`environment.yml`](../environment.yml).
 
+> The docker image for this environment is `ghcr.io/z-lab/paroquant:default`.
+
 We use pseudo-quantized models for all experiments, except for experiments on AWQ where we use [AutoAWQ](https://github.com/casper-hansen/AutoAWQ) to run real-quantized models. ParoQuant's pseudo-quantized models used in the experiments can be downloaded from the `pseudo` directory at [`z-lab/paroquant-checkpoints`](https://huggingface.co/z-lab/paroquant-checkpoints).
 
 ## Optimization
@@ -40,6 +42,8 @@ conda activate paroquant-eval
 
 ./experiments/tasks/reasoning.sh <model> <seed> [<task0>, <task1>, ...]
 ```
+
+> The docker image for this environment is `ghcr.io/z-lab/paroquant:eval-reasoning`.
 
 The seeds we use in our paper are 42 for MMLU-Pro and 42, 0, 1 for other tasks.
 
