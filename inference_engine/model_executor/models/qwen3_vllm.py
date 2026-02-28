@@ -61,6 +61,9 @@ from vllm.model_executor.model_loader.weight_utils import (
 from inference_engine.model_executor.modules.rotation_linear import (
     RotateLinearAWQMarlinInt4 as RotateLinearInt4,
 )
+from inference_engine.utils.awq_conversion_utils import (
+    convert_awq_llm_module_to_autoawq,
+)
 
 logger = init_logger(__name__)
 
@@ -319,7 +322,49 @@ class Qwen3Model(Qwen2Model):
     def load_weights(self, weights: Iterable[tuple[str, torch.Tensor]]) -> set[str]:
         params_dict = dict(self.named_parameters(remove_duplicate=False))
         loaded_params: set[str] = set()
-        points_to_buffers: dict[str, str] = {}
+        points_to_buffers: dict[str, torch.Tensor] = {}
+        module_quant_config: dict[str, tuple[int, int]] = {}
+        pending_awq_tensors: dict[str, dict[str, torch.Tensor]] = {}
+        did_online_conversion = False
+
+        def load_buffer_param(param_name: str, tensor: torch.Tensor) -> bool:
+            if param_name not in points_to_buffers:
+                return False
+            buffer = points_to_buffers[param_name]
+            tensor = tensor.to(device=buffer.device, dtype=buffer.dtype)
+            buffer.data.copy_(tensor)
+            loaded_params.add(param_name)
+            return True
+
+        def maybe_convert_pending_awq(module_prefix: str) -> bool:
+            nonlocal did_online_conversion
+            state = pending_awq_tensors.get(module_prefix)
+            if not state:
+                return False
+            required = (
+                "qlinear.qweight",
+                "qlinear.scales",
+                "qlinear.scaled_zeros",
+            )
+            if not all(key in state for key in required):
+                return False
+            if module_prefix not in module_quant_config:
+                return False
+
+            w_bit, group_size = module_quant_config[module_prefix]
+            qweight_awq, qzeros_awq, scales_awq = convert_awq_llm_module_to_autoawq(
+                qweight=state["qlinear.qweight"],
+                scales=state["qlinear.scales"],
+                scaled_zeros=state["qlinear.scaled_zeros"],
+                w_bit=w_bit,
+                group_size=group_size,
+            )
+            load_buffer_param(f"{module_prefix}qlinear.qweight", qweight_awq)
+            load_buffer_param(f"{module_prefix}qlinear.qzeros", qzeros_awq)
+            load_buffer_param(f"{module_prefix}qlinear.scales", scales_awq)
+            pending_awq_tensors.pop(module_prefix, None)
+            did_online_conversion = True
+            return True
 
         for i in range(self.start_layer, self.end_layer):
             layer = self.layers[i]
@@ -349,8 +394,13 @@ class Qwen3Model(Qwen2Model):
                     module = getattr(module, part)
 
                 if isinstance(module, RotateLinearInt4):
+                    module_prefix = f"layers.{i}.{module_name}."
+                    module_quant_config[module_prefix] = (
+                        module.qlinear.w_bit,
+                        module.qlinear.group_size,
+                    )
                     for buffer in buffer_names:
-                        param_name = f"layers.{i}.{module_name}.{buffer}"
+                        param_name = f"{module_prefix}{buffer}"
                         points_to_buffers[param_name] = module.buffer_name(buffer)
 
         for name, loaded_weight in weights:
@@ -378,19 +428,68 @@ class Qwen3Model(Qwen2Model):
             if is_pp_missing_parameter(name, self):
                 continue
 
-            if name in points_to_buffers:
-                buffer_name = points_to_buffers[name]
-                loaded_weight = loaded_weight.to(
-                    device=buffer_name.device, dtype=buffer_name.dtype
-                )
-                buffer_name.data.copy_(loaded_weight)
-                loaded_params.add(name)
+            if name.endswith("qlinear.scaled_zeros"):
+                module_prefix = name[: -len("qlinear.scaled_zeros")]
+                pending_awq_tensors.setdefault(module_prefix, {})[
+                    "qlinear.scaled_zeros"
+                ] = loaded_weight
+                maybe_convert_pending_awq(module_prefix)
+                continue
+
+            if name.endswith("qlinear.qweight"):
+                module_prefix = name[: -len("qlinear.qweight")]
+                pending_awq_tensors.setdefault(module_prefix, {})[
+                    "qlinear.qweight"
+                ] = loaded_weight
+                if maybe_convert_pending_awq(module_prefix):
+                    continue
+                target_buffer = points_to_buffers.get(name)
+                if (
+                    target_buffer is not None
+                    and loaded_weight.shape != target_buffer.shape
+                ):
+                    continue
+            elif name.endswith("qlinear.scales"):
+                module_prefix = name[: -len("qlinear.scales")]
+                pending_awq_tensors.setdefault(module_prefix, {})[
+                    "qlinear.scales"
+                ] = loaded_weight
+                if maybe_convert_pending_awq(module_prefix):
+                    continue
+                target_buffer = points_to_buffers.get(name)
+                if (
+                    target_buffer is not None
+                    and loaded_weight.shape != target_buffer.shape
+                ):
+                    continue
+            elif name.endswith("qlinear.qzeros"):
+                module_prefix = name[: -len("qlinear.qzeros")]
+                pending_awq_tensors.pop(module_prefix, None)
+
+            if load_buffer_param(name, loaded_weight):
                 continue
 
             param = params_dict[name]
             weight_loader = getattr(param, "weight_loader", default_weight_loader)
             weight_loader(param, loaded_weight)
             loaded_params.add(name)
+
+        pending_unresolved = [
+            prefix
+            for prefix, state in pending_awq_tensors.items()
+            if "qlinear.scaled_zeros" in state
+        ]
+        if pending_unresolved:
+            unresolved = ", ".join(pending_unresolved[:3])
+            raise ValueError(
+                "Failed to convert unconverted ParoQuant tensors for module prefixes: "
+                f"{unresolved}."
+            )
+
+        if did_online_conversion:
+            logger.info(
+                "Detected unconverted ParoQuant AWQ-LLM tensors (qlinear.scaled_zeros); applied online conversion to AutoAWQ format during load."
+            )
 
         for _, module in self.named_modules():
             if isinstance(module, RotateLinearInt4):

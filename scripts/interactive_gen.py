@@ -1,374 +1,267 @@
-# This script is based off of the generation script in https://github.com/chu-tianxiang/QuIP-for-all
+import argparse
+import asyncio
 import sys
 from pathlib import Path
-
-sys.path.append(str(Path(__file__).resolve().parents[1]))
-
-import time
-from typing import Optional
-
-import torch
-from transformers import (
-    AutoTokenizer,
-    AutoConfig,
-    LlamaConfig,
-    Qwen2Config,
-)
-from torch.nn.attention import SDPBackend
-from inference_engine.model_executor.models.cache_utils import StaticCache
+import io
+import contextlib
+import warnings
+import traceback
 import os
+from dataclasses import dataclass
+from typing import Dict, List, Optional
+from rich.console import Console
+from rich.panel import Panel
+from rich.prompt import Prompt
+from rich.theme import Theme
 
-torch.set_grad_enabled(False)
+sys.path.append(str(Path(__file__).parents[1]))
 
-from inference_engine.model_executor.models.llama import LlamaForCausalLM
-from inference_engine.model_executor.models.qwen3 import Qwen3ForCausalLM
-from inference_engine.model_executor.models.qwen3_fp16 import (
-    Qwen3ForCausalLMFP16,
-)
-from inference_engine.model_executor.models.llama_fp16 import (
-    LlamaForCausalLMFP16,
-)
-import gc
-from transformers.utils import CONFIG_NAME
-import json
-from huggingface_hub import hf_hub_download
+from inference_engine.generation import create_generator, GenerationParams
 
 
-def clean():
-    gc.collect()
-    torch.cuda.empty_cache()
+@dataclass
+class ChatAppConfig:
+    model: str
+    backend: str
+    max_new_tokens: int
+    temperature: float
+    top_p: float
+    top_k: Optional[int]
+    compile_decode: bool = False
+    gpu_memory_utilization: float = 0.8
+    enable_thinking: bool = False
+    debug: bool = False
 
 
-def _load_config_dict(path_or_repo: str):
-    if os.path.isdir(path_or_repo):
-        cfg_path = os.path.join(path_or_repo, CONFIG_NAME)
-        if not os.path.exists(cfg_path):
-            raise FileNotFoundError(f"config.json not found under: {path_or_repo}")
-        with open(cfg_path, "r") as f:
-            return json.load(f)
-    else:
-        cfg_path = hf_hub_download(path_or_repo, CONFIG_NAME)
-        with open(cfg_path, "r") as f:
-            return json.load(f)
+@contextlib.contextmanager
+def _silence_stderr():
+    buffer = io.StringIO()
+    with contextlib.redirect_stderr(buffer):
+        yield
 
 
-def model_from_hf_path(path, empty_model=False):
+@contextlib.contextmanager
+def _suppress_output_unless_error(console: Console, phase: str):
+    stdout_buffer = io.StringIO()
+    stderr_buffer = io.StringIO()
     try:
-        bad_config = AutoConfig.from_pretrained(path)
-        is_quantized = hasattr(bad_config, "paroquant_config")
-    except ValueError as e:
-        if "qwen3" in str(e).lower():
-            d = _load_config_dict(path)
-            bad_config = Qwen2Config(**d)
-            is_quantized = hasattr(bad_config, "paroquant_config")
-
-    model_type = bad_config.model_type
-    if is_quantized or empty_model:
-        if model_type == "llama":
-            model_str = path
-            model_cls = LlamaForCausalLM
-        elif model_type == "qwen3":
-            model_str = path
-            model_cls = Qwen3ForCausalLM
-        else:
-            raise Exception
-    else:
-        if model_type == "llama":
-            model_str = path
-            model_cls = LlamaForCausalLMFP16
-        elif model_type == "qwen3":
-            model_str = path
-            model_cls = Qwen3ForCausalLMFP16
-        else:
-            raise Exception
-    if empty_model:
-        model = model_cls(bad_config)
-        dtype = torch.float16
-        model = model.to(dtype=dtype)
-        model.to("cuda")
-        model.eval()
-    else:
-        model = model_cls.from_pretrained(
-            path,
-            torch_dtype="auto",
-            low_cpu_mem_usage=True,
-            attn_implementation="sdpa",
-            device_map="cuda",
-        )
-
-    return model, model_str
-
-
-def multinomial_sample_one_no_sync(
-    probs_sort,
-):  # Does multinomial sampling without a cuda synchronization
-    q = torch.empty_like(probs_sort).exponential_(1)
-    return torch.argmax(probs_sort / q, dim=-1, keepdim=True).to(dtype=torch.int)
-
-
-def logits_to_probs(logits, temperature: float = 1.0, top_k: Optional[int] = None):
-    logits = logits / max(temperature, 1e-5)
-
-    if top_k is not None:
-        v, _ = torch.topk(logits, min(top_k, logits.size(-1)))
-        pivot = v.select(-1, -1).unsqueeze(-1)
-        logits = torch.where(logits < pivot, -float("Inf"), logits)
-    probs = torch.nn.functional.softmax(logits, dim=-1)
-    return probs
-
-
-@torch.compile
-def sample(logits, temperature: float = 1.0, top_k: Optional[int] = None):
-    probs = logits_to_probs(logits[:, -1], temperature, top_k)
-    idx_next = multinomial_sample_one_no_sync(probs)
-    return idx_next, probs
-
-
-@torch.no_grad()
-def decode_one_tokens(model, cur_token, past_kv, cache_position):
-    logits = model(cur_token, past_key_values=past_kv, cache_position=cache_position)[0]
-    new_token = sample(logits, temperature=0.6, top_k=5)[0]
-    return new_token, logits
-
-
-@torch.no_grad()
-def generate(model, tokenizer, text, max_new_tokens, top_k, callback, past_kv):
-    inputs = tokenizer(text, return_tensors="pt").to(0)
-    batch_size, seq_length = inputs["input_ids"].shape
-    cache_position = torch.arange(seq_length, device=0)
-    generated_ids = torch.zeros(
-        batch_size, seq_length + max_new_tokens, dtype=torch.int, device=0
-    )
-    generated_ids[:, cache_position] = inputs["input_ids"].to(0).int()
-    logits = model(**inputs, past_key_values=past_kv, cache_position=cache_position)[0]
-
-    next_token, _ = sample(logits, top_k=top_k)
-
-    generated_ids[:, seq_length] = next_token
-    callback(next_token)
-
-    cache_position = torch.tensor([seq_length + 1], device=0)
-    decode_time = time.time()
-    for _ in range(1, max_new_tokens):
-        with torch.nn.attention.sdpa_kernel(
-            backends=[SDPBackend.FLASH_ATTENTION, SDPBackend.MATH]
+        with contextlib.redirect_stdout(stdout_buffer), contextlib.redirect_stderr(
+            stderr_buffer
         ):
-            next_token, logits = decode_one_tokens(
-                model, next_token.clone(), past_kv, cache_position
-            )
-        generated_ids[:, cache_position] = next_token.int()
-        callback(next_token)
-        cache_position += 1
-    torch.cuda.synchronize()
-    decode_time = time.time() - decode_time
-
-    text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-    return generated_ids, text, max_new_tokens / decode_time
-
-
-@torch.no_grad()
-def benchmark(model, tokenizer, prefill_len, decode_len, past_kv):
-    FIXED_TEXT = "The quick brown fox jumps over the lazy dog. "
-    pieces = []
-    while True:
-        pieces.append(FIXED_TEXT)
-        enc_full = tokenizer(
-            "".join(pieces), return_tensors="pt", add_special_tokens=False
-        )
-        if enc_full.input_ids.shape[1] >= prefill_len:
-            break
-
-    inputs = enc_full.to(0)
-    input_ids = inputs["input_ids"]
-    attn_mask = inputs["attention_mask"]
-    B, S = input_ids.shape
-
-    cache_position = torch.arange(S, device=0)
-    generated_ids = torch.empty(B, S + decode_len, dtype=torch.int, device=0)
-    generated_ids[:, :S] = input_ids
-
-    out = model(
-        **enc_full,
-        past_key_values=past_kv,
-        cache_position=cache_position,
-        use_cache=True,
-    )
-    logits = out[0]
-    next_token, _ = sample(logits)
-    generated_ids[:, S] = next_token
-
-    cache_position = torch.tensor([S + 1], device=0)
-    torch.cuda.synchronize()
-    t0 = time.time()
-
-    for t in range(1, decode_len):
-        with torch.nn.attention.sdpa_kernel(
-            backends=[SDPBackend.FLASH_ATTENTION, SDPBackend.MATH]
-        ):
-            next_token, logits = decode_one_tokens(
-                model, next_token.clone(), past_kv, cache_position
-            )
-        generated_ids[:, cache_position] = next_token.int()
-        cache_position += 1
-
-    torch.cuda.synchronize()
-    dt = time.time() - t0
-
-    texts = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-    return generated_ids, texts, decode_len / dt
+            yield
+    except Exception:
+        captured_stdout = stdout_buffer.getvalue().strip()
+        captured_stderr = stderr_buffer.getvalue().strip()
+        console.print(f"[red]{phase} failed.[/red]")
+        if captured_stdout:
+            console.print(captured_stdout)
+        if captured_stderr:
+            console.print(captured_stderr)
+        console.print(traceback.format_exc())
+        raise
 
 
-def llama_arg_fn(output, args, kwargs):
-    return (output[0], *args[1:]), kwargs
-
-
-def get_emb(args, kwargs):
-    return args[0]
-
-
-def main(hf_path, compile, interactive, max_tokens, top_k):
-
-    model, model_str = model_from_hf_path(hf_path)
-
-    sharded = False
-
-    tokenizer = AutoTokenizer.from_pretrained(model_str)
-
-    tokenizer.pad_token = tokenizer.eos_token
-
-    past_kv = StaticCache(
-        model.config, 1, 2 * args.max_new_tokens, device=0, dtype=model.dtype
-    )
-    text = "This is a test of this large language model"
-    callback = lambda x: x
-    ids, text, _ = generate(model, tokenizer, text, 8, top_k, callback, past_kv)
-
-    if compile:
-        print(
-            "Capturing CUDA graphs, may take some time. If you are running a model over multiple GPUs, the first generation will be very slow due to compiling the model."
-        )
-        global decode_one_tokens
-        decode_one_tokens = torch.compile(
-            decode_one_tokens, mode="max-autotune", fullgraph=True
-        )
-
-    text = "This is a test of this large language model"
-    ids, text, _ = generate(model, tokenizer, text, 16, top_k, callback, past_kv)
-
-    while True:
+async def run_chat_app(config: ChatAppConfig):
+    if not config.debug:
+        warnings.filterwarnings("ignore")
+        os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
+        os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+        if config.backend == "vllm":
+            os.environ.setdefault("VLLM_LOGGING_LEVEL", "ERROR")
         try:
-            prompt = input("What is your prompt? ")
-        except (EOFError, KeyboardInterrupt):
-            break
-        if prompt == "quit":
-            exit()
-        if tokenizer.chat_template is not None:
-            messages = [{"role": "user", "content": prompt}]
-            text = tokenizer.apply_chat_template(
-                messages, tokenize=False, add_generation_prompt=True, enable_thinking=False
+            from huggingface_hub import disable_progress_bars
+
+            disable_progress_bars()
+        except Exception:
+            pass
+        try:
+            from transformers.utils import logging as transformers_logging
+
+            transformers_logging.set_verbosity_error()
+        except Exception:
+            pass
+
+    console = Console(
+        theme=Theme(
+            {
+                "user": "bold cyan",
+                "assistant": "bold green",
+                "hint": "dim",
+            }
+        )
+    )
+
+    kwargs = {"enable_thinking": config.enable_thinking}
+    if config.backend == "transformers":
+        kwargs["compile_decode"] = config.compile_decode
+    if config.backend == "vllm":
+        kwargs["gpu_memory_utilization"] = config.gpu_memory_utilization
+
+    console.print("[hint]Loading model...[/hint]")
+    loading_ctx = (
+        contextlib.nullcontext()
+        if (config.debug or config.backend == "vllm")
+        else _suppress_output_unless_error(console, "Model loading")
+    )
+    with loading_ctx:
+        generator = create_generator(config.backend, config.model, **kwargs)
+
+    if config.backend == "transformers" and config.compile_decode:
+        warmup_params = GenerationParams(
+            max_new_tokens=min(8, config.max_new_tokens),
+            temperature=config.temperature,
+            top_p=config.top_p,
+            top_k=config.top_k,
+        )
+        warmup_ctx = (
+            contextlib.nullcontext()
+            if config.debug
+            else _suppress_output_unless_error(console, "Warmup")
+        )
+        with warmup_ctx:
+            await generator.generate(
+                [{"role": "user", "content": "Hello"}],
+                warmup_params,
+                on_text=None,
             )
-        else:
-            text = prompt
-        buffer = []
-        period_id = tokenizer.encode(".")[-1]
-        done_generating = False
 
-        def callback(x):
-            nonlocal done_generating
-            if done_generating:
-                return
-            buffer.append(tokenizer.decode([period_id] + x[0].tolist())[1:])
-            if x[0].item() == tokenizer.eos_token_id:
-                done_generating = True
-            if len(buffer) == 4 or done_generating:
-                print("".join(buffer), end="", flush=True)
-                buffer.clear()
-
-        if not interactive:
-            callback = lambda x: x
-        ids, text, decode_tps = generate(
-            model, tokenizer, text, max_tokens, top_k, callback, past_kv
+    console.print(
+        Panel.fit(
+            f"[bold]ParoQuant Chat[/bold]\nBackend: [bold]{config.backend}[/bold]\nModel: [bold]{config.model}[/bold]\n\nType [bold]/quit[/bold] to exit, [bold]/clear[/bold] to reset history.",
+            border_style="bright_blue",
         )
-        if not interactive:
-            print(text)
-
-        print(
-            f"\nDecoding throughput: {decode_tps:.02f} tokens/sec. Includes tokens generated after the EOS token.\n\n"
-        )
-
-
-def bench_model(hf_path, prefill_len, decode_len, empty_model):
-
-    model, model_str = model_from_hf_path(hf_path, empty_model=empty_model)
-    tokenizer = AutoTokenizer.from_pretrained(model_str)
-    tokenizer.pad_token = tokenizer.eos_token
-    past_kv = StaticCache(
-        model.config, 1, 2 * args.max_new_tokens, device=0, dtype=model.dtype
-    )
-    ids, text, _ = benchmark(model, tokenizer, 2, 8, past_kv)
-
-    print(
-        "Capturing CUDA graphs, may take some time. If you are running a model over multiple GPUs, the first generation will be very slow due to compiling the model."
     )
 
-    global decode_one_tokens
-    decode_one_tokens = torch.compile(
-        decode_one_tokens, mode="max-autotune", fullgraph=True
+    history: List[Dict[str, str]] = []
+
+    try:
+        while True:
+            try:
+                user_prompt = Prompt.ask("[user]You[/user]").strip()
+            except (KeyboardInterrupt, EOFError):
+                console.print("\n[hint]Session closed.[/hint]")
+                break
+
+            if not user_prompt:
+                continue
+            if user_prompt.lower() in {"/quit", "quit", "/exit", "exit"}:
+                break
+            if user_prompt.lower() == "/clear":
+                history.clear()
+                console.clear()
+                console.print("[hint]Conversation history cleared.[/hint]")
+                continue
+
+            history.append({"role": "user", "content": user_prompt})
+
+            params = GenerationParams(
+                max_new_tokens=config.max_new_tokens,
+                temperature=config.temperature,
+                top_p=config.top_p,
+                top_k=config.top_k,
+            )
+
+            console.print("[assistant]Assistant[/assistant]: ", end="")
+            generation_ctx = (
+                contextlib.nullcontext()
+                if (config.debug or config.backend == "vllm")
+                else _silence_stderr()
+            )
+            with generation_ctx:
+                result = await generator.generate(
+                    history,
+                    params,
+                    on_text=lambda text: console.print(
+                        text,
+                        end="",
+                        highlight=False,
+                        soft_wrap=True,
+                    ),
+                )
+            console.print()
+
+            history.append({"role": "assistant", "content": result.output_text})
+
+            stats = result.stats
+            ttft = f"{stats.ttft_s * 1000:.2f}ms" if stats.ttft_s is not None else "n/a"
+            metric_str = f"tokens={stats.token_count} | time={stats.total_time_s:.2f}s | ttft={ttft} | tps={stats.tokens_per_second:.2f}"
+            console.print(f"Metrics: {metric_str}", style="hint", highlight=False)
+            console.print()
+    finally:
+        await generator.close()
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Interactive terminal chat for ParoQuant models"
     )
-    ids, text, _ = benchmark(model, tokenizer, 16, 16, past_kv)
-    ids, text, decode_tps = benchmark(
-        model, tokenizer, prefill_len, decode_len, past_kv
+    parser.add_argument(
+        "--model", type=str, required=True, help="Path to checkpoint or HF model id"
     )
-    print(
-        f"\nDecoding throughput: {decode_tps:.02f} tokens/sec. Includes tokens generated after the EOS token.\n\n"
+    parser.add_argument(
+        "--backend",
+        type=str,
+        default="vllm",
+        choices=["transformers", "vllm"],
+        help="Generation backend",
     )
+    parser.add_argument(
+        "--max-new-tokens",
+        type=int,
+        default=16384,
+        help="Maximum number of new tokens",
+    )
+    parser.add_argument(
+        "--temperature", type=float, default=0.6, help="Sampling temperature"
+    )
+    parser.add_argument("--top-p", type=float, default=1.0, help="Top-p sampling")
+    parser.add_argument("--top-k", type=int, default=32, help="Top-k sampling")
+    parser.add_argument(
+        "--no-compile",
+        action="store_true",
+        help="Disable torch.compile decode path for transformers backend",
+    )
+    parser.add_argument(
+        "--gpu-memory-utilization",
+        type=float,
+        default=0.8,
+        help="vLLM GPU memory utilization ratio",
+    )
+    parser.add_argument(
+        "--enable-thinking",
+        action="store_true",
+        help="Pass enable_thinking=True to chat template when supported",
+    )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Disable suppression and show backend logs/warnings",
+    )
+    return parser
+
+
+async def run_from_args(args: argparse.Namespace):
+    config = ChatAppConfig(
+        model=args.model,
+        backend=args.backend,
+        max_new_tokens=args.max_new_tokens,
+        temperature=args.temperature,
+        top_p=args.top_p,
+        top_k=args.top_k,
+        compile_decode=not args.no_compile,
+        gpu_memory_utilization=args.gpu_memory_utilization,
+        enable_thinking=args.enable_thinking,
+        debug=args.debug,
+    )
+    await run_chat_app(config)
 
 
 if __name__ == "__main__":
-    import argparse
-
-    parser = argparse.ArgumentParser(description="Your CLI description.")
-
-    parser.add_argument("--model", type=str, help="Path to checkpoint")
-    parser.add_argument(
-        "--streaming", action="store_true", help="Whether to launch in stream mode"
-    )
-    parser.add_argument(
-        "--max-new-tokens", type=int, default=512, help="Maximum number of new tokens."
-    )
-    parser.add_argument("--top-k", type=int, default=32, help="Top-k for sampling.")
-    parser.add_argument(
-        "--no-compile", action="store_true", help="Whether to compile the model."
-    )
-    parser.add_argument(
-        "--disable-tf32",
-        action="store_true",
-        help="Whether to disable TF32 for FP32 matmuls.",
-    )
-    parser.add_argument(
-        "--bench-model",
-        action="store_true",
-        help="load pretrained model by config for benchmark",
-    )
-    parser.add_argument(
-        "--empty-model",
-        action="store_true",
-        help="load empty model by config for benchmark",
-    )
-    parser.add_argument("--prefill-len", default=256, help="prefill len for benchmark")
-    parser.add_argument("--decode-len", default=512, help="decode len for benchmark")
-
-    args = parser.parse_args()
-
-    if not args.disable_tf32:
-        torch.set_float32_matmul_precision("high")
-    if args.empty_model or args.bench_model:
-        bench_model(args.model, args.prefill_len, args.decode_len, args.empty_model)
-    else:
-        main(
-            args.model,
-            not args.no_compile,
-            args.streaming,
-            args.max_new_tokens,
-            args.top_k,
+    cli_args = build_parser().parse_args()
+    if cli_args.backend == "transformers" and cli_args.max_new_tokens > 1024:
+        print(
+            "Transformers backend suffers from performance degradation with long generations. Consider using vLLM backend for better performance."
         )
+        cli_args.max_new_tokens = 1024
+        print("Max new tokens set to 1024.")
+    asyncio.run(run_from_args(cli_args))

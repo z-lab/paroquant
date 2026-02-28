@@ -10,23 +10,21 @@ ParoQuant is an efficient 4-bit weight-only quantization method that achieves st
 
 ## Quick Start
 
-Try out ParoQuant with a single command:
+Try out ParoQuant models with a single command:
 
 ```
-docker run --rm -it --gpus all --ipc=host ghcr.io/z-lab/paroquant \
-    python scripts/interactive_gen.py --model z-lab/Qwen3-8B-PARO --streaming
+docker run --rm -it --gpus all --ipc=host paroquant:chat --model z-lab/Qwen3-8B-PARO
 ```
 
 ## Setup
 
-> [!NOTE]
-> You can use the docker image `ghcr.io/z-lab/paroquant` directly without manually setting up environment:
-> 
-> ```
-> docker run -it --gpus all --ipc=host ghcr.io/z-lab/paroquant
-> ```
-> 
-> Please follow the setup instructions below if you'd prefer running on the host.
+We recommend using the docker image `ghcr.io/z-lab/paroquant:default` without manually setting up environment:
+
+```
+docker run -it --gpus all --ipc=host ghcr.io/z-lab/paroquant:default
+```
+
+Please follow the setup instructions below if you'd prefer running on the host.
 
 Clone this repository:
 
@@ -78,45 +76,23 @@ python3 scripts/real_quant.py \
 
 ### Inference
 
-#### Transformers
+The docker image for interactive inference is `ghcr.io/z-lab/paroquant:chat`. Install `vllm` if you are running on the host:
 
-Pseudo-quantized models can be loaded directly with `transformers`. To load real-quantized models with `transformers`:
-
-```python
-# for LLaMA
-from inference_engine.model_executor.models.llama import LlamaForCausalLM
-model = LlamaForCausalLM.from_pretrained("z-lab/Llama-3.1-8B-Instruct-PARO")
-
-# for Qwen3
-from inference_engine.model_executor.models.qwen3 import Qwen3ForCausalLM
-model = Qwen3ForCausalLM.from_pretrained("z-lab/Qwen3-8B-PARO")
-```
-
-You can also try out the quantized models interactively:
-
-```sh
-python3 scripts/interactive_gen.py --model z-lab/Qwen3-8B-PARO --streaming
-```
-
-#### vLLM
-
-> The docker image for this environment is `ghcr.io/z-lab/paroquant:vllm`.
-
-For benchmarking generation of long sequences, please use vLLM for better CUDA Graphs support. We adopt the Marlin kernels from vLLM; therefore, you need to convert the format of ParoQuant-generated models first:
-
-```sh
-# install vllm
+```bash
 pip install vllm==0.15.1
-
-# convert to AutoAWQ-style format
-python3 scripts/convert_paro_to_awq.py --input z-lab/Qwen3-8B-PARO --output-dir /path/to/converted/model
 ```
 
-Then, run the converted model with vLLM:
+To run a real-quantized model with vLLM and open an interactive chat:
 
-```sh
-python3 scripts/interactive_gen_vllm.py --model /path/to/converted/model
+```bash
+# with docker
+docker run --rm -it --gpus all --ipc=host ghcr.io/z-lab/paroquant:chat --model z-lab/Qwen3-8B-PARO
+
+# without docker
+python3 scripts/interactive_gen.py --model z-lab/Qwen3-8B-PARO
 ```
+
+Add `--backend transformers` to run with the Transformers backend instead. Please note that Transformers suffers from performance degradation with long generations.
 
 ## Models
 
@@ -151,9 +127,9 @@ In the [`experiments`](./experiments/) directory, we provide the original script
 
 We provide three docker images for easy environment setup:
 
-- `ghcr.io/z-lab/paroquant`: for optimization and inference with Transformers backend
-- `ghcr.io/z-lab/paroquant:vllm`: for inference with vLLM backend
-- `ghcr.io/z-lab/paroquant:eval-reasoning`: for reasoning task evaluation
+- `ghcr.io/z-lab/paroquant:default` for optimization and non-reasoning task evaluation
+- `ghcr.io/z-lab/paroquant:chat` for running the chat app
+- `ghcr.io/z-lab/paroquant:eval-reasoning` for reasoning task evaluation
 
 Use the following command to create a container and activate an interactive shell:
 
