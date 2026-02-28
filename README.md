@@ -13,15 +13,17 @@ ParoQuant is an efficient 4-bit weight-only quantization method that achieves st
 Try out ParoQuant models with a single command:
 
 ```
-docker run --rm -it --gpus all --ipc=host paroquant:chat --model z-lab/Qwen3-8B-PARO
+docker run --rm -it --gpus all --ipc=host ghcr.io/z-lab/paroquant:chat --model z-lab/Qwen3-8B-PARO
 ```
+
+For platforms with compute capability ≥ 12.1 (e.g. NVIDIA DGX Spark), please use `ghcr.io/z-lab/paroquant:chat-cu130` instead.
 
 ## Setup
 
-We recommend using the docker image `ghcr.io/z-lab/paroquant:default` without manually setting up environment:
+We recommend using the docker image `ghcr.io/z-lab/paroquant:latest` without manually setting up environment:
 
 ```
-docker run -it --gpus all --ipc=host ghcr.io/z-lab/paroquant:default
+docker run -it --gpus all --ipc=host ghcr.io/z-lab/paroquant:latest
 ```
 
 Please follow the setup instructions below if you'd prefer running on the host.
@@ -76,7 +78,7 @@ python3 scripts/real_quant.py \
 
 ### Inference
 
-The docker image for interactive inference is `ghcr.io/z-lab/paroquant:chat`. Install `vllm` if you are running on the host:
+The docker image for interactive inference is `ghcr.io/z-lab/paroquant:chat`. Install vLLM if you are running on the host:
 
 ```bash
 pip install vllm==0.15.1
@@ -127,8 +129,9 @@ In the [`experiments`](./experiments/) directory, we provide the original script
 
 We provide three docker images for easy environment setup:
 
-- `ghcr.io/z-lab/paroquant:default` for optimization and non-reasoning task evaluation
+- `ghcr.io/z-lab/paroquant:latest` for optimization and non-reasoning task evaluation
 - `ghcr.io/z-lab/paroquant:chat` for running the chat app
+- `ghcr.io/z-lab/paroquant:chat-cu130` for running the chat app with CUDA 13.0
 - `ghcr.io/z-lab/paroquant:eval-reasoning` for reasoning task evaluation
 
 Use the following command to create a container and activate an interactive shell:
