@@ -43,7 +43,12 @@ jobs:
               else
                 tag="${filename#Dockerfile.}"
               fi
-              include+=("{\"name\":\"$name\",\"file\":\"$file\",\"tag\":\"$tag\"}")
+              if [[ "$tag" == *"cu130"* ]]; then
+                platforms="linux/amd64,linux/arm64"
+              else
+                platforms="linux/amd64"
+              fi
+              include+=("{\"name\":\"$name\",\"file\":\"$file\",\"tag\":\"$tag\",\"platforms\":\"$platforms\"}")
             fi
           done
 
@@ -78,13 +83,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and publish ${{ matrix.file }} (amd64 + arm64)
+      - name: Build and publish ${{ matrix.file }} (${{ matrix.platforms }})
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ${{ matrix.file }}
           push: true
           tags: ghcr.io/${{ github.repository }}:${{ matrix.tag }}
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ matrix.platforms }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
