@@ -37,7 +37,7 @@ RUN python3 -m venv /opt/venv
 
 ENV VIRTUAL_ENV=/opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
-ENV TORCH_CUDA_ARCH_LIST="8.0;8.6;8.7;8.9;9.0;10.0;12.0"
+ENV TORCH_CUDA_ARCH_LIST="8.0 8.6 8.7 8.9 9.0 10.0 12.0"
 
 COPY experiments/tasks/reasoning/requirements.txt .
 

@@ -6,7 +6,7 @@ import warnings
 import torch
 
 # Supported NVIDIA GPU architectures.
-SUPPORTED_ARCHS = {"8.0", "8.6", "8.7", "8.9", "9.0", "10.0", "12.0"}
+SUPPORTED_ARCHS = {"8.0", "8.6", "8.7", "8.9", "9.0", "10.0", "12.0", "12.1"}
 
 
 def get_torch_arch_list() -> Set[str]:

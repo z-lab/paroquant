@@ -1,9 +1,8 @@
-
-ARG CUDA_VERSION=12.9.1
+ARG CUDA_VERSION=13.0.2
 FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu22.04
 
 LABEL org.opencontainers.image.source=https://github.com/z-lab/paroquant
-LABEL org.opencontainers.image.description="Container for optimization and HuggingFace inference"
+LABEL org.opencontainers.image.description="Container for vLLM inference"
 LABEL org.opencontainers.image.licenses=MIT
 
 ARG PYTHON_VERSION=3.12
@@ -38,15 +37,14 @@ RUN python3 -m venv /opt/venv
 
 ENV VIRTUAL_ENV=/opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
-ENV TORCH_CUDA_ARCH_LIST="8.0 8.6 8.7 8.9 9.0 10.0 12.0"
+ENV TORCH_CUDA_ARCH_LIST="8.0 8.6 8.7 8.9 9.0 10.0 12.0 12.1"
 
-COPY requirements.txt .
-
-RUN pip install -r requirements.txt --no-cache-dir
+RUN pip install vllm==0.15.1 accelerate --no-cache-dir --extra-index-url https://wheels.vllm.ai/0.15.1/cu130 --extra-index-url https://download.pytorch.org/whl/cu130
 
 COPY ./kernels ./kernels
 RUN pip install ./kernels --no-cache-dir --no-build-isolation
 
 COPY . .
 
-CMD ["/bin/bash"]
+ENV TRITON_PTXAS_PATH=/usr/local/cuda/bin/ptxas
+ENTRYPOINT ["python", "scripts/interactive_gen.py"]
