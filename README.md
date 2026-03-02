@@ -18,7 +18,7 @@ docker run --pull=always --rm -it --gpus all --ipc=host \
   --model z-lab/Qwen3-8B-PARO
 ```
 
-For platforms with compute capability ≥ 12.1 (e.g. NVIDIA DGX Spark), please use `ghcr.io/z-lab/paroquant:chat-cu130` instead.
+For ARM64 platforms (e.g. NVIDIA DGX Spark), please use `ghcr.io/z-lab/paroquant:chat-cu130` instead.
 
 ## Setup
 
@@ -95,8 +95,6 @@ docker run --rm -it --gpus all --ipc=host ghcr.io/z-lab/paroquant:chat --model z
 # without docker
 python3 scripts/interactive_gen.py --model z-lab/Qwen3-8B-PARO
 ```
-
-Add `--backend transformers` to run with the Transformers backend instead. Please note that Transformers suffers from performance degradation with long generations.
 
 ## Models
 

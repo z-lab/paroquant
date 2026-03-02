@@ -27,7 +27,6 @@ class ChatAppConfig:
     temperature: float
     top_p: float
     top_k: Optional[int]
-    compile_decode: bool = False
     gpu_memory_utilization: float = 0.8
     enable_thinking: bool = False
     debug: bool = False
@@ -38,27 +37,6 @@ def _silence_stderr():
     buffer = io.StringIO()
     with contextlib.redirect_stderr(buffer):
         yield
-
-
-@contextlib.contextmanager
-def _suppress_output_unless_error(console: Console, phase: str):
-    stdout_buffer = io.StringIO()
-    stderr_buffer = io.StringIO()
-    try:
-        with contextlib.redirect_stdout(stdout_buffer), contextlib.redirect_stderr(
-            stderr_buffer
-        ):
-            yield
-    except Exception:
-        captured_stdout = stdout_buffer.getvalue().strip()
-        captured_stderr = stderr_buffer.getvalue().strip()
-        console.print(f"[red]{phase} failed.[/red]")
-        if captured_stdout:
-            console.print(captured_stdout)
-        if captured_stderr:
-            console.print(captured_stderr)
-        console.print(traceback.format_exc())
-        raise
 
 
 async def run_chat_app(config: ChatAppConfig):
@@ -92,40 +70,11 @@ async def run_chat_app(config: ChatAppConfig):
     )
 
     kwargs = {"enable_thinking": config.enable_thinking}
-    if config.backend == "transformers":
-        kwargs["compile_decode"] = config.compile_decode
     if config.backend == "vllm":
         kwargs["gpu_memory_utilization"] = config.gpu_memory_utilization
 
     console.print("[hint]Loading model...[/hint]")
-    loading_ctx = (
-        contextlib.nullcontext()
-        if (config.debug or config.backend == "vllm")
-        else _suppress_output_unless_error(console, "Model loading")
-    )
-    with loading_ctx:
-        generator = create_generator(config.backend, config.model, **kwargs)
-
-    if config.backend == "transformers" and config.compile_decode:
-        warmup_params = GenerationParams(
-            # Need to warmup with with exact same max_new_tokens to trigger
-            # compilation of the target cache size.
-            max_new_tokens=config.max_new_tokens,
-            temperature=config.temperature,
-            top_p=config.top_p,
-            top_k=config.top_k,
-        )
-        warmup_ctx = (
-            contextlib.nullcontext()
-            if config.debug
-            else _suppress_output_unless_error(console, "Warmup")
-        )
-        with warmup_ctx:
-            await generator.generate(
-                [{"role": "user", "content": "Hello"}],
-                warmup_params,
-                on_text=None,
-            )
+    generator = create_generator(config.backend, config.model, **kwargs)
 
     console.print(
         Panel.fit(
@@ -165,9 +114,7 @@ async def run_chat_app(config: ChatAppConfig):
 
             console.print("[assistant]Assistant[/assistant]: ", end="")
             generation_ctx = (
-                contextlib.nullcontext()
-                if (config.debug or config.backend == "vllm")
-                else _silence_stderr()
+                contextlib.nullcontext() if config.debug else _silence_stderr()
             )
             with generation_ctx:
                 result = await generator.generate(
@@ -204,8 +151,8 @@ def build_parser() -> argparse.ArgumentParser:
         "--backend",
         type=str,
         default="vllm",
-        choices=["transformers", "vllm"],
-        help="Generation backend",
+        choices=["vllm"],
+        help="Generation backend (vLLM only)",
     )
     parser.add_argument(
         "--max-new-tokens",
@@ -218,11 +165,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--top-p", type=float, default=1.0, help="Top-p sampling")
     parser.add_argument("--top-k", type=int, default=32, help="Top-k sampling")
-    parser.add_argument(
-        "--no-compile",
-        action="store_true",
-        help="Disable torch.compile decode path for transformers backend",
-    )
     parser.add_argument(
         "--gpu-memory-utilization",
         type=float,
@@ -251,7 +193,6 @@ async def run_from_args(args: argparse.Namespace):
         temperature=args.temperature,
         top_p=args.top_p,
         top_k=args.top_k,
-        compile_decode=not args.no_compile,
         gpu_memory_utilization=args.gpu_memory_utilization,
         enable_thinking=args.enable_thinking,
         debug=args.debug,
@@ -261,10 +202,4 @@ async def run_from_args(args: argparse.Namespace):
 
 if __name__ == "__main__":
     cli_args = build_parser().parse_args()
-    if cli_args.backend == "transformers" and cli_args.max_new_tokens > 1024:
-        print(
-            "Transformers backend suffers from performance degradation with long generations. Consider using vLLM backend for better performance."
-        )
-        cli_args.max_new_tokens = 1024
-        print("Max new tokens set to 1024.")
     asyncio.run(run_from_args(cli_args))
