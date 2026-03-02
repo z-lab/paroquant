@@ -12,8 +12,10 @@ ParoQuant is an efficient 4-bit weight-only quantization method that achieves st
 
 Try out ParoQuant models with a single command:
 
-```
-docker run --rm -it --gpus all --ipc=host ghcr.io/z-lab/paroquant:chat --model z-lab/Qwen3-8B-PARO
+```bash
+docker run --pull=always --rm -it --gpus all --ipc=host \
+  ghcr.io/z-lab/paroquant:chat \
+  --model z-lab/Qwen3-8B-PARO
 ```
 
 For platforms with compute capability ≥ 12.1 (e.g. NVIDIA DGX Spark), please use `ghcr.io/z-lab/paroquant:chat-cu130` instead.
@@ -127,7 +129,7 @@ In the [`experiments`](./experiments/) directory, we provide the original script
 
 ## Docker
 
-We provide three docker images for easy environment setup:
+We provide four docker images for easy environment setup:
 
 - `ghcr.io/z-lab/paroquant:latest` for optimization and non-reasoning task evaluation
 - `ghcr.io/z-lab/paroquant:chat` for running the chat app

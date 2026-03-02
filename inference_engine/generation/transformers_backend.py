@@ -161,7 +161,6 @@ class TransformersGenerator(UnifiedGenerator):
             self.tokenizer.pad_token = self.tokenizer.eos_token
 
         self.enable_thinking = enable_thinking
-        self._period_id = self.tokenizer.encode(".", add_special_tokens=False)[-1]
         self._decode_impl = decode_one_token
         if compile_decode:
             self._decode_impl = torch.compile(
@@ -240,6 +239,7 @@ class TransformersGenerator(UnifiedGenerator):
         generated_token_ids: List[int] = []
         token_events = []
         output_chunks: List[str] = []
+        emitted_text = ""
 
         decode_position = torch.tensor([seq_length + 1], device=0)
 
@@ -253,8 +253,22 @@ class TransformersGenerator(UnifiedGenerator):
             if token_id == self.tokenizer.eos_token_id:
                 break
 
-            piece = self.tokenizer.decode([self._period_id, token_id])[1:]
-            output_chunks.append(piece)
+            try:
+                decoded_text = self.tokenizer.decode(
+                    generated_token_ids,
+                    clean_up_tokenization_spaces=False,
+                )
+            except TypeError:
+                decoded_text = self.tokenizer.decode(generated_token_ids)
+
+            if decoded_text.startswith(emitted_text):
+                piece = decoded_text[len(emitted_text) :]
+            else:
+                piece = decoded_text
+            emitted_text = decoded_text
+
+            if piece:
+                output_chunks.append(piece)
 
             if first_token_time is None and piece:
                 first_token_time = time.perf_counter()

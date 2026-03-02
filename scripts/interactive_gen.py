@@ -230,9 +230,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="vLLM GPU memory utilization ratio",
     )
     parser.add_argument(
-        "--enable-thinking",
-        action="store_true",
-        help="Pass enable_thinking=True to chat template when supported",
+        "--disable-thinking",
+        action="store_false",
+        dest="enable_thinking",
+        help="Pass enable_thinking=False to chat template when supported",
     )
     parser.add_argument(
         "--debug",
