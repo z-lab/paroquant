@@ -9,13 +9,14 @@ from paroquant.inference.base import BaseGenerator, GenerationParams, Generation
 
 
 class VllmGenerator(BaseGenerator):
+
     def __init__(
         self,
         model: str,
         gpu_memory_utilization: float = 0.8,
         trust_remote_code: bool = True,
         enable_thinking: bool = False,
-        enforce_eager: bool = True,
+        enforce_eager: bool = False,
         max_model_len: int | None = None,
     ):
         from vllm import AsyncEngineArgs, AsyncLLMEngine
@@ -62,7 +63,7 @@ class VllmGenerator(BaseGenerator):
 
         async for output in self.engine.generate(prompt, sampling, request_id):
             text = output.outputs[0].text
-            delta = text[len(last_text):]
+            delta = text[len(last_text) :]
             if delta:
                 if first_token_time is None:
                     first_token_time = time.perf_counter()
