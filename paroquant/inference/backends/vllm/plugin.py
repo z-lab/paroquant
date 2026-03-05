@@ -210,16 +210,16 @@ class ParoQuantLinearMethod(LinearMethodBase):
         else:
             qw, sc, qz = [layer.qweight.data], [layer.scales.data], [layer.qzeros.data]
 
-        paro_qw, paro_sc, paro_qz = [], [], []
+        marlin_qweight, marlin_scales, marlin_zp = [], [], []
         for i in range(n):
             out_n = sizes[i]
-            paro_qw.append(ops.awq_marlin_repack(qw[i].contiguous(), size_k=k, size_n=out_n, num_bits=bits))
-            paro_sc.append(marlin_permute_scales(sc[i].contiguous(), size_k=k, size_n=out_n, group_size=gs))
-            paro_qz.append(awq_to_marlin_zero_points(qz[i].contiguous(), size_k=layer.num_groups, size_n=out_n, num_bits=bits))
+            marlin_qweight.append(ops.awq_marlin_repack(qw[i].contiguous(), size_k=k, size_n=out_n, num_bits=bits))
+            marlin_scales.append(marlin_permute_scales(sc[i].contiguous(), size_k=k, size_n=out_n, group_size=gs))
+            marlin_zp.append(awq_to_marlin_zero_points(qz[i].contiguous(), size_k=layer.num_groups, size_n=out_n, num_bits=bits))
 
-        layer.paro_qw = paro_qw
-        layer.paro_sc = paro_sc
-        layer.paro_qz = paro_qz
+        layer.marlin_qweight = marlin_qweight
+        layer.marlin_scales = marlin_scales
+        layer.marlin_zp = marlin_zp
         layer.workspace = marlin_make_workspace_new(device)
         layer.g_idx = marlin_make_empty_g_idx(device)
         layer.g_idx_sort_indices = marlin_make_empty_g_idx(device)
@@ -243,7 +243,7 @@ class ParoQuantLinearMethod(LinearMethodBase):
                 x, layer.rotation_pairs[i], layer.rotation_theta[i], layer.rotation_channel_scales[i],
             )
             outputs.append(apply_awq_marlin_linear(
-                input=x_rot, weight=layer.paro_qw[i], weight_scale=layer.paro_sc[i], weight_zp=layer.paro_qz[i],
+                input=x_rot, weight=layer.marlin_qweight[i], weight_scale=layer.marlin_scales[i], weight_zp=layer.marlin_zp[i],
                 g_idx=layer.g_idx, g_idx_sort_indices=layer.g_idx_sort_indices, workspace=layer.workspace,
                 quant_type=self.quant_config.quant_type,
                 output_size_per_partition=layer.output_partition_sizes[i],

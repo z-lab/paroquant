@@ -26,9 +26,9 @@ from paroquant.optim.util import (
     empty_cache,
     get_named_linears,
 )
-from paroquant.optim.optimize import get_random_rotation_pairs
-from paroquant.optim.module import PseudoQuantizedLinear
-from paroquant.utils.convert import transform_to_kernel_data
+from paroquant.optim.train import get_random_rotation_pairs
+from paroquant.optim.qlinear import PseudoQuantizedLinear
+from paroquant.optim.rotation import transform_to_kernel_data
 
 try:
     from hadamard_utils import random_hadamard_matrix

@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 import torch
 import torch.nn as nn
 from torch.utils.checkpoint import checkpoint
 
-from .util import clamp_ste, round_ste
+from .quant import clamp_ste, round_ste
 
 
 def _calc_scales_and_zero_points(

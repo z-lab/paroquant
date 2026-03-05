@@ -1,15 +1,18 @@
-import torch
+"""Apply pseudo-quantized weights from optimization results to a HuggingFace model.
+
+    python -m paroquant.cli.pseudo_quant --model <hf_id> --result-dir <dir> --output-path <dir>
+"""
+
+from __future__ import annotations
+
 from argparse import ArgumentParser
 from pathlib import Path
+
+import torch
 from tqdm import tqdm
 
-from paroquant.optim.util import (
-    load_model,
-    load_tokenizer,
-    get_blocks,
-    get_named_linears,
-)
-from paroquant.optim.module import PseudoQuantizedLinear
+from paroquant.optim.qlinear import PseudoQuantizedLinear
+from paroquant.optim.util import get_blocks, get_named_linears, load_model, load_tokenizer
 
 
 def main():

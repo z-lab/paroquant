@@ -1,6 +1,6 @@
 """Build script that optionally compiles the CUDA rotation kernel.
 
-If torch + CUDA are available, builds the paroquant._C extension.
+If torch + CUDA are available, builds the paroquant_kernels._C extension.
 Otherwise, installs the pure-Python package without the kernel
 (MLX backend doesn't need it).
 """

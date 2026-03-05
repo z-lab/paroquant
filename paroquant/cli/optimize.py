@@ -1,17 +1,20 @@
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Literal
+
+import simple_parsing
 import torch
 import torch.nn as nn
-import simple_parsing
-from dataclasses import dataclass, field
 from tqdm import tqdm
-from pathlib import Path
-import json
-from typing import Literal, Optional
 
-from paroquant.optim.optimize import (
+from paroquant.optim.train import (
     optimize_module,
     get_random_rotation_pairs,
 )
-from paroquant.optim.module import (
+from paroquant.optim.qlinear import (
     PseudoQuantizedLinear,
     reset_angles_by_mask,
 )
@@ -29,7 +32,7 @@ from paroquant.optim.util import (
     logger,
     CachedTensorShards,
 )
-from paroquant.utils.convert import transform_to_kernel_data
+from paroquant.optim.rotation import transform_to_kernel_data
 
 
 @dataclass(kw_only=True)
@@ -65,7 +68,7 @@ class Config:
     train_size: int
     validation_size: int
     batch_size: int
-    val_batch_size: Optional[int] = None  # Defaults to batch_size if not set.
+    val_batch_size: int | None = None
     seqlen: int
 
     # Number of shards to cache the input/output tensors. At any time, only one shard

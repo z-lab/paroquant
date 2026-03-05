@@ -1,9 +1,13 @@
+from __future__ import annotations
+
+import random
+from collections.abc import Callable, Iterator
+from copy import deepcopy
+from typing import Literal
+
 import torch
 import torch.nn as nn
 from tqdm import tqdm
-from copy import deepcopy
-from typing import Literal, Optional, Iterator, Callable
-import random
 
 from .util import CosineAnnealingParam, logger
 
@@ -95,8 +99,8 @@ def optimize_module(
     *,
     loss_fn: Literal["mse", "smooth_l1"],
     n_iter: int,
-    early_stop: Optional[int],
-    post_optim_callback: Optional[Callable[[nn.Module], None]] = None,
+    early_stop: int | None,
+    post_optim_callback: Callable[[nn.Module], None] | None = None,
 ) -> None:
     train_input_batches, train_output_batches = train_set_batches
     val_input_batches, val_output_batches = val_set_batches

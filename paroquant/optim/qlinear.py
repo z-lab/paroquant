@@ -1,12 +1,13 @@
+from __future__ import annotations
+
 import torch
 from torch import nn
-from typing import Optional
 from torch.utils.checkpoint import checkpoint
 
 from .util import get_named_linears
 from .quantizer import UniformAffineQuantizer
 
-from paroquant_kernels import scaled_pairwise_rotation
+from paroquant.kernels.cuda import scaled_pairwise_rotation
 
 
 class PseudoQuantizedLinear(nn.Module):
@@ -15,8 +16,8 @@ class PseudoQuantizedLinear(nn.Module):
     def __init__(
         self,
         linear: nn.Linear,
-        rotation_pairs: Optional[list[torch.Tensor]],
-        channel_scales: Optional[torch.Tensor],
+        rotation_pairs: list[torch.Tensor] | None,
+        channel_scales: torch.Tensor | None,
         *,
         group_size: int,
         n_bits: int,
@@ -81,7 +82,7 @@ class PseudoQuantizedLinear(nn.Module):
         )
         assert self.mask.dtype == torch.bool, self.mask.dtype
 
-        self.quantizer: Optional[UniformAffineQuantizer] = None
+        self.quantizer: UniformAffineQuantizer | None = None
         self.register_buffer("quantizer_optim_enabled", torch.tensor(False))
         n_bits = n_bits if isinstance(n_bits, torch.Tensor) else torch.tensor(n_bits)
         group_size = (
@@ -93,7 +94,7 @@ class PseudoQuantizedLinear(nn.Module):
         self.register_buffer("group_size", group_size)
 
     def forward(
-        self, x: torch.Tensor, weight_update: Optional[torch.Tensor] = None
+        self, x: torch.Tensor, weight_update: torch.Tensor | None = None
     ) -> torch.Tensor:
         weight = self.weight
         if weight_update is not None:

@@ -1,7 +1,7 @@
 """Benchmark ParoQuant vs MLX community quantized checkpoints.
 
 Example:
-    python -m paroquant.inference.backends.mlx.benchmark \\
+    python -m paroquant.cli.bench_mlx \\
         --sizes 0.8B,2B,4B,9B \\
         --max-tokens 64 \\
         --warmup-runs 3 \\
@@ -80,7 +80,8 @@ def _load_native(repo: str):
 
 
 def _load_paro(repo: str):
-    return load_paro(repo)
+    model, processor, _is_vlm = load_paro(repo)
+    return model, processor
 
 
 def _load_and_warmup(

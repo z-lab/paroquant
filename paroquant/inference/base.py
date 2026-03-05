@@ -10,10 +10,11 @@ from dataclasses import dataclass
 
 @dataclass
 class GenerationParams:
-    max_new_tokens: int = 512
+    """Sampling parameters (follows vLLM SamplingParams convention)."""
+    max_tokens: int = 512
     temperature: float = 0.6
     top_p: float = 1.0
-    top_k: int | None = 32
+    top_k: int = 32
 
 
 @dataclass

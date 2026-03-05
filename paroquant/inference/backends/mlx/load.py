@@ -1,3 +1,5 @@
+"""Model loading for the MLX backend (auto-detects LLM vs VLM)."""
+
 import importlib
 from pathlib import Path
 
@@ -5,10 +7,14 @@ import mlx.core as mx
 import mlx.nn as mlx_nn
 import numpy as np
 
-from .nn import RotateQuantizedLinear
+from .modules import RotateQuantizedLinear
+
+# ---------------------------------------------------------------------------
+# AutoAWQ → MLX weight conversion
+# ---------------------------------------------------------------------------
 
 _BITS = 4
-_PF = 32 // _BITS  # 8 values per int32
+_PF = 32 // _BITS
 _MASK = (1 << _BITS) - 1
 _SHIFTS = np.arange(0, 32, _BITS, dtype=np.int64)
 _INV_REORDER = np.array([0, 4, 1, 5, 2, 6, 3, 7])
@@ -30,11 +36,7 @@ def _pack_mlx(w: np.ndarray) -> np.ndarray:
 
 
 def _convert_autoawq(weights, group_size):
-    """Convert AutoAWQ int32 checkpoint to MLX quantized format.
-
-    AutoAWQ: qweight (in, out//8) int32, scales (groups, out), qzeros (groups, out//8)
-    MLX:     weight  (out, in//8) uint32, scales (out, groups), biases (out, groups)
-    """
+    """Convert AutoAWQ int32 checkpoint to MLX quantized format."""
     prefixes = {k.removesuffix("qweight")
                 for k in weights if k.endswith(".qweight") and f"{k[:-len('qweight')]}theta" in weights}
     if not prefixes:
@@ -50,15 +52,12 @@ def _convert_autoawq(weights, group_size):
         suffix = key[len(pfx):]
         if suffix == "qweight":
             out[f"{pfx}weight"] = mx.array(_pack_mlx(_unpack_and_reorder(np.array(val)).T))
-
         elif suffix == "scales":
             out[f"{pfx}scales"] = mx.array(np.array(val).T.copy())
-
         elif suffix == "qzeros":
             zeros = _unpack_and_reorder(np.array(val)).astype(np.float32)
             scales = np.array(weights[f"{pfx}scales"]).astype(np.float32)
             out[f"{pfx}biases"] = mx.array((-scales * zeros).T.copy().astype(np.float16))
-
         elif suffix in ("theta", "pairs", "channel_scales", "bias"):
             out[key] = val.reshape(1, -1) if suffix == "channel_scales" and val.ndim == 1 else val
 
@@ -66,21 +65,55 @@ def _convert_autoawq(weights, group_size):
 
 
 # ---------------------------------------------------------------------------
-# Model loading
+# Model construction (LLM vs VLM)
 # ---------------------------------------------------------------------------
 
-def _get_model_classes(config):
-    from mlx_lm.utils import MODEL_REMAPPING
+def _create_model(config: dict, is_vlm: bool):
+    if is_vlm:
+        from mlx_vlm.utils import get_model_and_args, update_module_configs
+        mod, _ = get_model_and_args(config=config)
+        cfg = mod.ModelConfig.from_dict(config)
+        cfg = update_module_configs(cfg, mod, config, ["text", "vision", "perceiver", "projector", "audio"])
+        return mod.Model(cfg)
 
+    from mlx_lm.utils import MODEL_REMAPPING
     model_type = MODEL_REMAPPING.get(config["model_type"], config["model_type"])
     for name in (model_type, *(model_type.removesuffix(s) for s in ("_text", "_lm") if model_type.endswith(s))):
         try:
             arch = importlib.import_module(f"mlx_lm.models.{name}")
-            return arch.Model, arch.ModelArgs
+            return arch.Model(arch.ModelArgs.from_dict(config))
         except (ImportError, ModuleNotFoundError):
             continue
-    raise ValueError(f"No model module for model_type={model_type!r}")
+    raise ValueError(f"No mlx_lm model for model_type={model_type!r}")
 
+
+def _load_processor(local_dir: Path, model, is_vlm: bool):
+    if not is_vlm:
+        from mlx_lm.utils import load_tokenizer
+        return load_tokenizer(local_dir)
+
+    try:
+        from mlx_vlm.utils import load_image_processor, load_processor
+        processor = load_processor(local_dir, trust_remote_code=True)
+        image_processor = load_image_processor(local_dir)
+        if image_processor is not None:
+            processor.image_processor = image_processor
+        return processor
+    except Exception:
+        from mlx_vlm.utils import load_tokenizer
+        processor = load_tokenizer(local_dir)
+
+    if not hasattr(processor, "stopping_criteria"):
+        eos = getattr(model.config, "eos_token_id", None)
+        eos_set = set(eos) if isinstance(eos, list) else {eos} if eos is not None else set()
+        processor.stopping_criteria = lambda token: int(token) in eos_set
+
+    return processor
+
+
+# ---------------------------------------------------------------------------
+# Shared helpers
+# ---------------------------------------------------------------------------
 
 def _get_module(root, path):
     node = root
@@ -102,14 +135,12 @@ def _patch_rotation_layers(model, weights, bits, group_size):
     for prefix in sorted(k.removesuffix(".theta") for k in weights if k.endswith(".theta")):
         original = _get_module(model, prefix)
         _set_module(
-            model,
-            prefix,
+            model, prefix,
             RotateQuantizedLinear(
                 input_dims=original.weight.shape[-1],
                 output_dims=original.weight.shape[0],
                 bias="bias" in original,
-                group_size=group_size,
-                bits=bits,
+                group_size=group_size, bits=bits,
                 krot=weights[f"{prefix}.theta"].shape[0],
             ),
         )
@@ -119,39 +150,51 @@ def _is_io_layer(path, module):
     return hasattr(module, "to_quantized") and (path.endswith("embed_tokens") or path.endswith("lm_head"))
 
 
-def load(path_or_hf_repo: str, tokenizer_config: dict | None = None, lazy: bool = False):
+# ---------------------------------------------------------------------------
+# Public API
+# ---------------------------------------------------------------------------
+
+def load(model_path: str, lazy: bool = False) -> tuple:
+    """Load a ParoQuant model for MLX. Returns (model, processor, is_vlm)."""
     from huggingface_hub import snapshot_download
-    from mlx_lm.utils import load_config, load_tokenizer
 
-    model_path = Path(path_or_hf_repo)
-    if not model_path.is_dir():
-        model_path = Path(snapshot_download(str(path_or_hf_repo)))
+    local_dir = Path(model_path)
+    if not local_dir.is_dir():
+        local_dir = Path(snapshot_download(model_path))
 
-    config = load_config(model_path)
+    try:
+        from mlx_vlm.utils import load_config
+    except ImportError:
+        from mlx_lm.utils import load_config
+    config = load_config(local_dir)
+
     paro = config.get("quantization_config", {})
     group_size = int(paro.get("group_size", 128))
     bits = int(paro.get("bits", 4))
+    is_vlm = "vision_config" in config
 
-    Model, ModelArgs = _get_model_classes(config)
-    model = Model(ModelArgs.from_dict(config))
+    # 1. Create model
+    model = _create_model(config, is_vlm)
 
+    # 2. Load + convert weights
     weights = {}
-    for sf in sorted(model_path.glob("*.safetensors")):
+    for sf in sorted(local_dir.glob("*.safetensors")):
         weights.update(mx.load(str(sf)))
-
     if any(k.endswith(".qweight") for k in weights):
         weights = _convert_autoawq(weights, group_size)
-
     if hasattr(model, "sanitize"):
         weights = model.sanitize(weights)
 
+    # 3. Patch rotation layers + load weights
     _patch_rotation_layers(model, weights, bits, group_size)
     model.load_weights(list(weights.items()), strict=False)
-
     mlx_nn.quantize(model, group_size, bits, mode="affine", class_predicate=_is_io_layer)
 
     if not lazy:
         mx.eval(model.parameters())
     model.eval()
 
-    return model, load_tokenizer(model_path, tokenizer_config)
+    # 4. Load processor/tokenizer
+    processor = _load_processor(local_dir, model, is_vlm)
+
+    return model, processor, is_vlm

@@ -68,14 +68,7 @@ experiments/optimize/4bit.sh Qwen/Qwen3-8B
 Then, create a huggingface model with pseudo quantization (*i.e.,* model weights are in FP16 simulating the quantization) or real quantization (*i.e.*, model weights are in INT4):
 
 ```bash
-# pseudo quantization
 python3 -m paroquant.cli.pseudo_quant \
-    --model Qwen/Qwen3-8B \
-    --result-dir output/Qwen3-8B \
-    --output-path models/Qwen3-8B-PARO-pseudo
-
-# real quantization
-python3 -m paroquant.cli.real_quant \
     --model Qwen/Qwen3-8B \
     --result-dir output/Qwen3-8B \
     --output-path models/Qwen3-8B-PARO

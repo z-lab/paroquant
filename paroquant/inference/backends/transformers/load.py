@@ -3,26 +3,28 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Iterator
 
 import torch
 import torch.nn as nn
 from tqdm import tqdm
 from transformers import AutoConfig, AutoModelForCausalLM
 
-from .nn import RotateLinearW4A16
+from .modules import RotateQuantizedLinear
 
 
-def _iter_linears(module: nn.Module, prefix: str = "") -> Iterator[tuple[str, nn.Module, str, nn.Linear]]:
-    for name, child in module.named_children():
-        full = f"{prefix}.{name}" if prefix else name
+def _iter_linear_layers(module: nn.Module, prefix: str = "") -> Iterator[tuple[str, nn.Module, str, nn.Linear]]:
+    """Yield (dotted_path, parent_module, attr_name, linear) for every nn.Linear in the tree."""
+    for attr, child in module.named_children():
+        path = f"{prefix}.{attr}" if prefix else attr
         if isinstance(child, nn.Linear):
-            yield full, module, name, child
-        yield from _iter_linears(child, full)
+            yield path, module, attr, child
+        yield from _iter_linear_layers(child, path)
 
 
-def _resolve_local_dir(model_id: str) -> Path:
+def _resolve_model_dir(model_id: str) -> Path:
+    """Return local directory for a model, downloading from HF Hub if necessary."""
     p = Path(model_id)
     if p.is_dir():
         return p
@@ -30,21 +32,22 @@ def _resolve_local_dir(model_id: str) -> Path:
     return Path(snapshot_download(model_id))
 
 
-def _open_weight_shards(local_dir: Path) -> tuple[dict[str, str], dict]:
+def _open_safetensor_shards(model_dir: Path) -> tuple[dict[str, str], dict]:
+    """Open all safetensor shards and return (weight_map, file_handles)."""
     from safetensors import safe_open
 
-    index_path = local_dir / "model.safetensors.index.json"
+    index_path = model_dir / "model.safetensors.index.json"
     if index_path.exists():
         with open(index_path) as f:
             weight_map = json.load(f)["weight_map"]
     else:
-        sf = next(local_dir.glob("*.safetensors"))
+        sf = next(model_dir.glob("*.safetensors"))
         with safe_open(str(sf), framework="pt") as fh:
             weight_map = {k: sf.name for k in fh.keys()}
 
     handles: dict[str, object] = {}
     for shard_name in set(weight_map.values()):
-        handles[shard_name] = safe_open(str(local_dir / shard_name), framework="pt")
+        handles[shard_name] = safe_open(str(model_dir / shard_name), framework="pt")
 
     return weight_map, handles
 
@@ -74,38 +77,51 @@ def load(path: str) -> nn.Module:
     bits = qcfg.get("bits", 4)
     group_size = qcfg.get("group_size", 128)
 
-    local_dir = _resolve_local_dir(path)
-    weight_map, handles = _open_weight_shards(local_dir)
+    model_dir = _resolve_model_dir(path)
+    weight_map, handles = _open_safetensor_shards(model_dir)
 
-    def get(key: str) -> torch.Tensor:
+    def _load_tensor(key: str) -> torch.Tensor:
         return handles[weight_map[key]].get_tensor(key)
 
     model = AutoModelForCausalLM.from_pretrained(
-        local_dir, torch_dtype=torch.float16, low_cpu_mem_usage=True,
+        model_dir, torch_dtype=torch.float16, low_cpu_mem_usage=True,
         attn_implementation="sdpa", device_map="cpu",
     )
 
-    for full, parent, key, linear in tqdm(list(_iter_linears(model)), desc="Loading quantized layers"):
-        qw_key = f"{full}.qweight"
-        if qw_key not in weight_map:
+    # Build a map from checkpoint key prefix to model param prefix.
+    # from_pretrained may strip prefixes (e.g. "model.language_model." → "model.").
+    ckpt_qw_keys = {k for k in weight_map if k.endswith(".qweight")}
+
+    def _resolve(param_path: str) -> str | None:
+        """Find the checkpoint prefix that matches a model parameter path."""
+        if f"{param_path}.qweight" in ckpt_qw_keys:
+            return param_path
+        for ck in ckpt_qw_keys:
+            if ck.endswith(f"{param_path}.qweight") or ck.endswith(f".{param_path}.qweight"):
+                return ck.removesuffix(".qweight")
+        return None
+
+    for layer_path, parent, attr, linear in tqdm(list(_iter_linear_layers(model)), desc="Loading quantized layers"):
+        ckpt_prefix = _resolve(layer_path)
+        if ckpt_prefix is None:
             continue
 
-        rl = RotateLinearW4A16(
+        rl = RotateQuantizedLinear(
             linear.in_features, linear.out_features,
             bias=linear.bias is not None,
             group_size=group_size, bits=bits,
-            rotation_angles=get(f"{full}.theta").cuda(),
-            rotation_pairs=get(f"{full}.pairs").cuda(),
-            channel_scales=get(f"{full}.channel_scales").cuda(),
+            rotation_angles=_load_tensor(f"{ckpt_prefix}.theta").cuda(),
+            rotation_pairs=_load_tensor(f"{ckpt_prefix}.pairs").cuda(),
+            channel_scales=_load_tensor(f"{ckpt_prefix}.channel_scales").cuda(),
             device="cuda",
         )
-        rl.qlinear.qweight.data.copy_(get(f"{full}.qweight").cuda())
-        rl.qlinear.qzeros.data.copy_(get(f"{full}.qzeros").cuda())
-        rl.qlinear.scales.data.copy_(get(f"{full}.scales").cuda())
+        rl.qlinear.qweight.data.copy_(_load_tensor(f"{ckpt_prefix}.qweight").cuda())
+        rl.qlinear.qzeros.data.copy_(_load_tensor(f"{ckpt_prefix}.qzeros").cuda())
+        rl.qlinear.scales.data.copy_(_load_tensor(f"{ckpt_prefix}.scales").cuda())
         if linear.bias is not None:
             rl.qlinear.bias.data.copy_(linear.bias.data.cuda())
 
-        setattr(parent, key, rl)
+        setattr(parent, attr, rl)
 
     model.cuda()
     return model

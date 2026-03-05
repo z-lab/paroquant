@@ -1,3 +1,10 @@
+"""Interactive terminal chat for ParoQuant models.
+
+    python -m paroquant.cli.chat --model <path_or_hf_id> --backend vllm
+"""
+
+from __future__ import annotations
+
 import argparse
 import asyncio
 import contextlib
@@ -5,19 +12,20 @@ import io
 import os
 import warnings
 from dataclasses import dataclass
+
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.theme import Theme
 
-from paroquant.inference import create_generator, GenerationParams
+from paroquant.inference import GenerationParams, create_generator
 
 
 @dataclass
 class ChatAppConfig:
     model: str
     backend: str
-    max_new_tokens: int
+    max_tokens: int
     temperature: float
     top_p: float
     top_k: int | None
@@ -70,12 +78,13 @@ async def run_chat_app(config: ChatAppConfig):
     console.print("[hint]Loading model...[/hint]")
     generator = create_generator(config.backend, config.model, **kwargs)
 
-    console.print(
-        Panel.fit(
-            f"[bold]ParoQuant Chat[/bold]\nBackend: [bold]{config.backend}[/bold]\nModel: [bold]{config.model}[/bold]\n\nType [bold]/quit[/bold] to exit, [bold]/clear[/bold] to reset history.",
-            border_style="bright_blue",
-        )
+    banner = (
+        f"[bold]ParoQuant Chat[/bold]\n"
+        f"Backend: [bold]{config.backend}[/bold]\n"
+        f"Model: [bold]{config.model}[/bold]\n\n"
+        f"Type [bold]/quit[/bold] to exit, [bold]/clear[/bold] to reset history."
     )
+    console.print(Panel.fit(banner, border_style="bright_blue"))
 
     history: list[dict[str, str]] = []
 
@@ -100,7 +109,7 @@ async def run_chat_app(config: ChatAppConfig):
             history.append({"role": "user", "content": user_prompt})
 
             params = GenerationParams(
-                max_new_tokens=config.max_new_tokens,
+                max_tokens=config.max_tokens,
                 temperature=config.temperature,
                 top_p=config.top_p,
                 top_k=config.top_k,
@@ -125,10 +134,13 @@ async def run_chat_app(config: ChatAppConfig):
 
             history.append({"role": "assistant", "content": result.output_text})
 
-            stats = result.stats
-            ttft = f"{stats.ttft_s * 1000:.2f}ms" if stats.ttft_s is not None else "n/a"
-            metric_str = f"tokens={stats.token_count} | time={stats.total_time_s:.2f}s | ttft={ttft} | tps={stats.tokens_per_second:.2f}"
-            console.print(f"Metrics: {metric_str}", style="hint", highlight=False)
+            s = result.stats
+            ttft = f"{s.ttft_s * 1000:.2f}ms" if s.ttft_s is not None else "n/a"
+            metrics = (
+                f"tokens={s.token_count} | time={s.total_time_s:.2f}s"
+                f" | ttft={ttft} | tps={s.tokens_per_second:.2f}"
+            )
+            console.print(f"Metrics: {metrics}", style="hint", highlight=False)
             console.print()
     finally:
         await generator.close()
@@ -149,10 +161,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Generation backend",
     )
     parser.add_argument(
-        "--max-new-tokens",
+        "--max-tokens",
         type=int,
         default=16384,
-        help="Maximum number of new tokens",
+        help="Maximum number of tokens to generate",
     )
     parser.add_argument(
         "--temperature", type=float, default=0.6, help="Sampling temperature"
@@ -183,7 +195,7 @@ async def run_from_args(args: argparse.Namespace):
     config = ChatAppConfig(
         model=args.model,
         backend=args.backend,
-        max_new_tokens=args.max_new_tokens,
+        max_tokens=args.max_tokens,
         temperature=args.temperature,
         top_p=args.top_p,
         top_k=args.top_k,

@@ -1,16 +1,18 @@
-import torch
-import torch.nn as nn
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from datasets import load_dataset
+from __future__ import annotations
+
 import gc
-from typing import Optional, TypeVar
-import warnings
-import random
 import logging
 import math
-from tqdm import tqdm
+import random
+import warnings
+from typing import TypeVar
 
-from paroquant.utils.quant import round_ste, clamp_ste  # noqa: F401
+import torch
+import torch.nn as nn
+from datasets import load_dataset
+from tqdm import tqdm
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
 
 
 def get_blocks(model: nn.Module) -> nn.ModuleList:
@@ -59,7 +61,7 @@ def set_module_by_name(layer, name, new_module):
 
 
 def load_model(
-    model_path: str, device_map: str = None, dtype=torch.float32, **kwargs
+    model_path: str, device_map: str | None = None, dtype=torch.float32, **kwargs
 ) -> nn.Module:
     model = AutoModelForCausalLM.from_pretrained(
         model_path, device_map=device_map, torch_dtype=dtype, **kwargs
@@ -209,7 +211,7 @@ def catch_first_layer_input(
     model: nn.Module,
     layers: nn.ModuleList,
     samples: torch.Tensor,
-    batch_size: Optional[int],
+    batch_size: int | None,
 ) -> tuple[torch.Tensor, dict]:
     layer_kwargs = {}
     batched = batch_size is not None

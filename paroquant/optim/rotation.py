@@ -1,10 +1,8 @@
-"""Checkpoint format conversion: .pt rotation params to kernel-ready format."""
+"""Rotation pair/angle alignment utilities for the CUDA kernel format."""
 
 from __future__ import annotations
 
 import torch
-
-from paroquant.utils.quant import clamp_ste, round_ste
 
 
 def _align_shape(pair, angle, grp_size=128, inc_mask=False):
@@ -68,42 +66,6 @@ def _align_shape(pair, angle, grp_size=128, inc_mask=False):
         masks = torch.cat(mask_groups, dim=0)
         return rotation_pairs, angles, masks
     return rotation_pairs, angles
-
-
-def transform_from_pt(pt: dict, krot: int = 8, include_qsz: bool = False):
-    """Transform a loaded .pt state dict into rotation params and weights."""
-    weight = pt["weight"]
-    group_size = pt["quantizer.group_size"].item()
-    n_bit = pt["quantizer.n_bits"].item()
-    in_feat = weight.size(1)
-
-    from_kernel_form = pt.get("pairs_grouped", None)
-    if from_kernel_form is None:
-        pairs, angles = [], []
-        for i in range(krot):
-            pair = pt[f"pairs_grouped.{i}"]
-            angle = pt[f"angles_grouped.{i}"]
-            pair, angle = _align_shape(pair, angle, group_size)
-            assert pair.size(0) == in_feat and angle.size(0) * 2 == in_feat
-            pairs.append(pair.view(-1).contiguous() % group_size)
-            angles.append(angle)
-        rotation_pairs = torch.stack(pairs, dim=0)
-        rotation_angles = torch.stack(angles, dim=0)
-    else:
-        rotation_pairs = pt["pairs_grouped"]
-        rotation_angles = pt["angles_grouped"]
-
-    channel_scales = (1 / pt["channel_scales"].float()).to(weight.dtype)
-    if channel_scales.ndim == 1:
-        channel_scales = channel_scales.unsqueeze(0)
-
-    qscales = pt["quantizer.scale"]
-    qzeros = pt["quantizer.zero_point_float"]
-    round_zero_point = clamp_ste(-round_ste(qzeros), 0, 2**n_bit - 1)
-
-    if include_qsz:
-        return weight, rotation_pairs, rotation_angles, channel_scales, qscales, qzeros, round_zero_point
-    return weight, rotation_pairs, rotation_angles, channel_scales
 
 
 def transform_to_kernel_data(

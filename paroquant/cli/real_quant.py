@@ -1,15 +1,20 @@
+"""Convert optimization .pt results into AutoAWQ-format HuggingFace checkpoints.
+
+    python -m paroquant.cli.real_quant --model <hf_id> --result-dir <dir> --output-path <dir>
+"""
+
 from __future__ import annotations
 
-from argparse import ArgumentParser
 import json
-from pathlib import Path
 import shutil
+from argparse import ArgumentParser
+from pathlib import Path
 
 import torch
 from tqdm import tqdm
-from transformers import AutoModelForCausalLM, AutoModelForImageTextToText, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoModelForImageTextToText
 
-from paroquant.inference.backends.transformers.nn import RotateLinearW4A16
+from paroquant.inference.backends.transformers.modules import RotateQuantizedLinear
 from paroquant.kernels.cuda import scaled_pairwise_rotation
 from paroquant.optim.util import get_named_linears, set_module_by_name
 
@@ -92,7 +97,7 @@ def _pack_awq(values: torch.Tensor, bits: int) -> torch.Tensor:
 
 
 def _flatten_paroquant_keys(state_dict: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
-    """Flatten RotateLinearW4A16 keys to AutoAWQ-style names.
+    """Flatten RotateQuantizedLinear keys to AutoAWQ-style flat names.
 
     Transforms:
     - `<prefix>.rotation.theta` -> `<prefix>.theta`
@@ -135,16 +140,15 @@ def _resolve_model_dir(model_id: str) -> Path | None:
     path = Path(model_id)
     if path.exists() and path.is_dir():
         return path
-
     try:
         from huggingface_hub import snapshot_download
-
         return Path(snapshot_download(repo_id=model_id))
     except Exception:
         return None
 
 
-def _copy_non_readme_files(src_dir: Path, dst_dir: Path) -> None:
+def _copy_non_weight_files(src_dir: Path, dst_dir: Path) -> None:
+    """Copy config/tokenizer files from the source model, skipping weights and READMEs."""
     weight_suffixes = {".safetensors", ".bin", ".pt", ".ckpt"}
     for src_path in src_dir.rglob("*"):
         if not src_path.is_file():
@@ -167,6 +171,7 @@ def _copy_non_readme_files(src_dir: Path, dst_dir: Path) -> None:
 
 @torch.no_grad()
 def _convert_state_dict(state_dict: dict, device: str) -> dict[str, torch.Tensor | int]:
+    """Convert a per-layer optimization .pt checkpoint to AutoAWQ int32 format."""
     weight = state_dict["weight"].to(device=device, dtype=torch.float32)
     out_features, in_features = weight.shape
 
@@ -188,11 +193,7 @@ def _convert_state_dict(state_dict: dict, device: str) -> dict[str, torch.Tensor
         channel_scales_opt = channel_scales_opt.unsqueeze(0)
 
     rotated_weight = scaled_pairwise_rotation(
-        weight * channel_scales_opt,
-        pairs,
-        theta,
-        None,
-        group_size,
+        weight * channel_scales_opt, pairs, theta, None, group_size,
     )
 
     n_groups = in_features // group_size
@@ -201,26 +202,24 @@ def _convert_state_dict(state_dict: dict, device: str) -> dict[str, torch.Tensor
         raise ValueError(f"out_features={out_features} is not divisible by pack={pack_factor}")
 
     scales_flat = state_dict["quantizer.scale"].to(device=device, dtype=torch.float32).reshape(-1, 1)
-    zero_points_flat = state_dict["quantizer.zero_point_float"].to(device=device, dtype=torch.float32).reshape(-1, 1)
+    zp_flat = state_dict["quantizer.zero_point_float"].to(device=device, dtype=torch.float32).reshape(-1, 1)
     if scales_flat.shape[0] != out_features * n_groups:
         raise ValueError(
             f"Unexpected quantizer.scale shape {tuple(state_dict['quantizer.scale'].shape)}, "
             f"expected {out_features * n_groups} rows"
         )
 
-    zero_points = torch.clamp(-torch.round(zero_points_flat), 0, (1 << bits) - 1)
+    zero_points = torch.clamp(-torch.round(zp_flat), 0, (1 << bits) - 1)
 
     grouped_weight = rotated_weight.reshape(-1, group_size)
-    quantized = torch.round(grouped_weight / scales_flat) + zero_points
-    quantized = torch.clamp(quantized, 0, (1 << bits) - 1).to(torch.int32)
-    quantized = quantized.reshape(out_features, in_features)
+    quantized = torch.clamp(torch.round(grouped_weight / scales_flat) + zero_points, 0, (1 << bits) - 1)
+    quantized = quantized.to(torch.int32).reshape(out_features, in_features)
 
-    qweight_raw = quantized.transpose(0, 1).contiguous()
-    qweight = _pack_awq(qweight_raw, bits).cpu()
-
+    qweight = _pack_awq(quantized.transpose(0, 1).contiguous(), bits).cpu()
     scales = scales_flat.reshape(out_features, n_groups).transpose(0, 1).contiguous().to(torch.float16).cpu()
-    qzeros_raw = zero_points.to(torch.int32).reshape(out_features, n_groups).transpose(0, 1).contiguous()
-    qzeros = _pack_awq(qzeros_raw, bits).cpu()
+    qzeros = _pack_awq(
+        zero_points.to(torch.int32).reshape(out_features, n_groups).transpose(0, 1).contiguous(), bits
+    ).cpu()
 
     channel_scales = (1.0 / channel_scales_opt).to(torch.float16).cpu()
     if channel_scales.ndim == 1:
@@ -245,23 +244,20 @@ def _convert_state_dict(state_dict: dict, device: str) -> dict[str, torch.Tensor
 
 @torch.no_grad()
 def main() -> None:
-    parser = ArgumentParser()
-    parser.add_argument("--model", type=str, required=True)
-    parser.add_argument("--result-dir", type=str, required=True)
-    parser.add_argument("--output-path", type=str, required=True)
+    parser = ArgumentParser(description="Convert optimization results to AutoAWQ-format HuggingFace checkpoint")
+    parser.add_argument("--model", type=str, required=True, help="Base model HF id or local path")
+    parser.add_argument("--result-dir", type=str, required=True, help="Directory with per-layer .pt files")
+    parser.add_argument("--output-path", type=str, required=True, help="Output directory for the quantized model")
     args = parser.parse_args()
 
     if not torch.cuda.is_available():
         raise RuntimeError("CUDA is required for real quant conversion (rotation kernel runs on CUDA).")
 
-    dtype = torch.float16
     result_dir = Path(args.result_dir)
     if not result_dir.is_dir():
         raise FileNotFoundError(f"Result directory not found: {result_dir}")
 
-    target_model_id = args.model
-
-    model = _load_model(target_model_id, dtype=dtype)
+    model = _load_model(args.model, dtype=torch.float16)
     blocks = _get_blocks(model)
     optimize_args = _load_optimize_args(result_dir)
 
@@ -270,42 +266,39 @@ def main() -> None:
     config_group_size = 128
     config_krot = 8
 
-    for layer_index, layer in enumerate(tqdm(blocks, desc="Converting layers")):
-        linears = get_named_linears(layer)
-        for name, module in linears.items():
-            result_file = result_dir / f"{layer_index}.{name}.pt"
+    for layer_idx, layer in enumerate(tqdm(blocks, desc="Converting layers")):
+        for name, module in get_named_linears(layer).items():
+            result_file = result_dir / f"{layer_idx}.{name}.pt"
             if not result_file.exists():
                 continue
 
-            state_dict = torch.load(result_file, map_location="cpu", weights_only=False)
-            converted_state = _convert_state_dict(state_dict, device="cuda")
+            sd = torch.load(result_file, map_location="cpu", weights_only=False)
+            converted = _convert_state_dict(sd, device="cuda")
 
-            rotated_linear = RotateLinearW4A16(
+            rl = RotateQuantizedLinear(
                 module.in_features,
                 module.out_features,
                 bias=module.bias is not None,
-                group_size=int(converted_state["group_size"]),
-                bits=int(converted_state["bits"]),
-                rotation_angles=converted_state["theta"],
-                rotation_pairs=converted_state["pairs"],
-                channel_scales=converted_state["channel_scales"],
+                group_size=int(converted["group_size"]),
+                bits=int(converted["bits"]),
+                rotation_angles=converted["theta"],
+                rotation_pairs=converted["pairs"],
+                channel_scales=converted["channel_scales"],
                 device="cpu",
             )
-            rotated_linear.qlinear.qweight.copy_(converted_state["qweight"])
-            rotated_linear.qlinear.qzeros.copy_(converted_state["qzeros"])
-            rotated_linear.qlinear.scales.copy_(converted_state["scales"])
+            rl.qlinear.qweight.copy_(converted["qweight"])
+            rl.qlinear.qzeros.copy_(converted["qzeros"])
+            rl.qlinear.scales.copy_(converted["scales"])
 
             if module.bias is not None:
-                if "bias" in converted_state:
-                    rotated_linear.qlinear.bias.copy_(converted_state["bias"])
-                else:
-                    rotated_linear.qlinear.bias.copy_(module.bias.detach().to(dtype=torch.float16, device="cpu"))
+                bias = converted.get("bias", module.bias.detach().to(torch.float16))
+                rl.qlinear.bias.copy_(bias)
 
-            set_module_by_name(layer, name, rotated_linear)
+            set_module_by_name(layer, name, rl)
             converted_count += 1
-            config_bits = int(converted_state["bits"])
-            config_group_size = int(converted_state["group_size"])
-            config_krot = int(converted_state["krot"])
+            config_bits = int(converted["bits"])
+            config_group_size = int(converted["group_size"])
+            config_krot = int(converted["krot"])
 
         layer.cpu()
         torch.cuda.empty_cache()
@@ -313,29 +306,24 @@ def main() -> None:
     if converted_count == 0:
         raise RuntimeError(f"No checkpoint files were matched in {result_dir}")
 
-    quantization_config = {
+    quant_config = {
         "quant_method": "paroquant",
         "bits": config_bits,
         "group_size": config_group_size,
         "krot": config_krot,
     }
-
-    dynamic_config = _build_dynamic_quant_config(optimize_args)
-    if dynamic_config:
-        quantization_config["dynamic"] = dynamic_config
-
-    model.config.quantization_config = quantization_config
-    if hasattr(model.config, "orig_model_name"):
-        model.config.orig_model_name = args.model
+    dynamic = _build_dynamic_quant_config(optimize_args)
+    if dynamic:
+        quant_config["dynamic"] = dynamic
+    model.config.quantization_config = quant_config
 
     output_path = Path(args.output_path)
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    flat_state_dict = _flatten_paroquant_keys(model.state_dict())
-    model.save_pretrained(output_path, state_dict=flat_state_dict)
+    model.save_pretrained(output_path, state_dict=_flatten_paroquant_keys(model.state_dict()))
 
-    source_model_dir = _resolve_model_dir(target_model_id)
-    if source_model_dir is not None:
-        _copy_non_readme_files(source_model_dir, output_path)
+    source_dir = _resolve_model_dir(args.model)
+    if source_dir is not None:
+        _copy_non_weight_files(source_dir, output_path)
 
     print(f"Converted {converted_count} linear layers")
     print(f"Model saved to {output_path}")
