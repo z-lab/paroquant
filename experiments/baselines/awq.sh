@@ -20,7 +20,7 @@ python experiments/baselines/autoawq_cli.py \
     --q_group_size 128 \
     --w_bit $bits
 
-python -m paroquant.cli.eval_ppl \
+python -m paroquant.cli.evaluate \
     --model $project_dir/awq_cache/$model_name-w$bits-g128-quant \
     --seed 0 \
     --seqlen $seqlen \

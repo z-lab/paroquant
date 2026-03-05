@@ -1,13 +1,3 @@
-"""HuggingFace quantizer integration for ParoQuant.
-
-Registers ``paroquant`` as a quantization method with transformers so that
-``AutoModel*.from_pretrained`` loads ParoQuant checkpoints natively.
-
-Usage:
-    import paroquant.inference.backends.transformers.quantizer  # registers once
-    model = AutoModelForCausalLM.from_pretrained("z-lab/Qwen3-8B-PARO", device_map="cuda")
-"""
-
 from __future__ import annotations
 
 import glob

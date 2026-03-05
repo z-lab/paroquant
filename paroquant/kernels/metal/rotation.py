@@ -1,8 +1,3 @@
-"""Metal pairwise Givens rotation kernel (Apple Silicon).
-
-JIT-compiled via ``mx.fast.metal_kernel`` on first call, then cached.
-"""
-
 from functools import lru_cache
 from pathlib import Path
 

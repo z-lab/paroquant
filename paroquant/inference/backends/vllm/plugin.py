@@ -1,17 +1,3 @@
-"""vLLM quantization plugin for ParoQuant.
-
-Registers ``paroquant`` as a quantization method so any vLLM-supported
-architecture can be served with rotation + INT4-AWQ-Marlin — no fork needed.
-
-Checkpoint format (AutoAWQ int32, flat naming):
-    qweight        (in, out // 8)   int32
-    qzeros         (groups, out // 8) int32
-    scales         (groups, out)     fp16
-    theta          (krot, in // 2)   fp16
-    pairs          (krot, in)        int16
-    channel_scales (1, in)           fp16
-"""
-
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any

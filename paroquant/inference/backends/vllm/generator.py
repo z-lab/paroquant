@@ -1,5 +1,3 @@
-"""vLLM inference backend — async streaming via AsyncLLMEngine."""
-
 from __future__ import annotations
 
 import time

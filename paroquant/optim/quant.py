@@ -1,5 +1,3 @@
-"""Quantization primitives: STE rounding and clamping."""
-
 from __future__ import annotations
 
 import torch

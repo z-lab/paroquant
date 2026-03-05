@@ -1,8 +1,3 @@
-"""Interactive terminal chat for ParoQuant models.
-
-    python -m paroquant.cli.chat --model <path_or_hf_id> --backend vllm
-"""
-
 from __future__ import annotations
 
 import argparse

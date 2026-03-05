@@ -1,5 +1,3 @@
-"""Rotation pair/angle alignment utilities for the CUDA kernel format."""
-
 from __future__ import annotations
 
 import torch

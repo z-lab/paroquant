@@ -1,5 +1,3 @@
-"""Model loading for the MLX backend (auto-detects LLM vs VLM)."""
-
 from __future__ import annotations
 
 import logging

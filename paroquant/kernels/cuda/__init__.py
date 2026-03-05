@@ -1,5 +1,3 @@
-"""CUDA rotation kernel for ParoQuant."""
-
 import torch
 
 from paroquant_kernels import _C  # noqa: F401 — loads the compiled .so, registers torch.ops.rotation.rotate

@@ -20,81 +20,9 @@ docker run --pull=always --rm -it --gpus all --ipc=host \
 
 For ARM64 platforms (e.g. NVIDIA DGX Spark), please use `ghcr.io/z-lab/paroquant:chat-cu130` instead.
 
-## Setup
-
-We recommend using the docker image `ghcr.io/z-lab/paroquant:latest` without manually setting up environment:
-
-```
-docker run -it --gpus all --ipc=host ghcr.io/z-lab/paroquant:latest
-```
-
-Please follow the setup instructions below if you'd prefer running on the host.
-
-Clone this repository:
-
-```bash
-git clone https://github.com/z-lab/paroquant
-cd paroquant
-```
-
-Install dependencies:
-
-```bash
-# GPU — optimization & evaluation (builds CUDA rotation kernel automatically)
-pip install -e ".[optim,eval]" --no-build-isolation
-
-# GPU — Transformers inference (chat)
-pip install -e ".[transformers]" --no-build-isolation
-
-# GPU — vLLM inference (chat)
-pip install -e ".[vllm]" --no-build-isolation
-
-# Apple Silicon — MLX inference (no CUDA build needed)
-pip install -e ".[mlx]"
-```
-
-You may need to adjust the PyTorch version in [`pyproject.toml`](pyproject.toml) to match your CUDA version.
-
-## Usage
-
-### Optimization
-
-First, run the optimization script to obtain the optimized checkpoints. The checkpoints will be stored in `output/<model_name>`.
-
-```bash
-experiments/optimize/4bit.sh Qwen/Qwen3-8B
-```
-
-Then, create a huggingface model with pseudo quantization (*i.e.,* model weights are in FP16 simulating the quantization) or real quantization (*i.e.*, model weights are in INT4):
-
-```bash
-python3 -m paroquant.cli.pseudo_quant \
-    --model Qwen/Qwen3-8B \
-    --result-dir output/Qwen3-8B \
-    --output-path models/Qwen3-8B-PARO
-```
-
-### Inference
-
-The docker image for interactive inference is `ghcr.io/z-lab/paroquant:chat`. Install vLLM if you are running on the host:
-
-```bash
-pip install vllm==0.15.1
-```
-
-To run a real-quantized model with vLLM and open an interactive chat:
-
-```bash
-# with docker
-docker run --rm -it --gpus all --ipc=host ghcr.io/z-lab/paroquant:chat --model z-lab/Qwen3-8B-PARO
-
-# without docker
-python3 -m paroquant.cli.chat --model z-lab/Qwen3-8B-PARO
-```
-
 ## Models
 
-We provide pre-quantized 4-bit ParoQuant models listed below. These are real-quantized models and can be loaded with the method described above.
+We provide pre-quantized 4-bit ParoQuant models listed below:
 
 | Model                        | Hugging Face Path                                                                                           |
 | ---------------------------- | ----------------------------------------------------------------------------------------------------------- |
@@ -115,7 +43,71 @@ We provide pre-quantized 4-bit ParoQuant models listed below. These are real-qua
 | Qwen3-4B-Thinking-2507       | [`z-lab/Qwen3-4B-Thinking-2507-PARO`](https://huggingface.co/z-lab/Qwen3-4B-Thinking-2507-PARO)             |
 | DeepSeek-R1-Distill-Llama-8B | [`z-lab/DeepSeek-R1-Distill-Llama-8B-PARO`](https://huggingface.co/z-lab/DeepSeek-R1-Distill-Llama-8B-PARO) |
 
-In addition, we provide the original checkpoints and pseudo-quantized models in [`z-lab/paroquant-checkpoints`](https://huggingface.co/z-lab/paroquant-checkpoints) to facilitate reproduction and further research.
+We also provide the original optimization checkpoints and pseudo-quantized models in [`z-lab/paroquant-checkpoints`](https://huggingface.co/z-lab/paroquant-checkpoints).
+
+## Setup
+
+We recommend using the docker image `ghcr.io/z-lab/paroquant:latest` without manually setting up environment:
+
+```
+docker run -it --gpus all --ipc=host ghcr.io/z-lab/paroquant:latest
+```
+
+Please follow the setup instructions below if you'd prefer running on the host.
+
+```bash
+git clone https://github.com/z-lab/paroquant
+cd paroquant
+
+# GPU — Transformers inference
+pip install -e ".[transformers]" --no-build-isolation
+
+# GPU — vLLM inference
+pip install -e ".[vllm]" --no-build-isolation
+
+# Apple Silicon — MLX inference (no CUDA build needed)
+pip install -e ".[mlx]"
+
+# GPU — optimization & evaluation
+pip install -e ".[optim,eval]" --no-build-isolation
+```
+
+You may need to adjust the PyTorch version in [`pyproject.toml`](pyproject.toml) to match your CUDA version.
+
+## Inference
+
+Interactive chat with any backend:
+
+```bash
+# with docker
+docker run --rm -it --gpus all --ipc=host ghcr.io/z-lab/paroquant:chat --model z-lab/Qwen3-8B-PARO
+
+# without docker (defaults to transformers backend)
+python3 -m paroquant.cli.chat --model z-lab/Qwen3-8B-PARO
+
+# with vLLM backend
+python3 -m paroquant.cli.chat --model z-lab/Qwen3-8B-PARO --backend vllm
+
+# on Apple Silicon
+python3 -m paroquant.cli.chat --model z-lab/Qwen3-8B-PARO --backend mlx
+```
+
+## Optimization
+
+Run the optimization script to obtain per-layer checkpoints:
+
+```bash
+experiments/optimize/4bit.sh Qwen/Qwen3-8B
+```
+
+Then convert to a Hugging Face model. Use `--mode real` (default) for INT4 weights or `--mode pseudo` for FP16 weights simulating quantization:
+
+```bash
+python3 -m paroquant.cli.convert \
+    --model Qwen/Qwen3-8B \
+    --result-dir output/Qwen3-8B \
+    --output-path models/Qwen3-8B-PARO
+```
 
 ## Reproduction
 
@@ -123,14 +115,12 @@ In the [`experiments`](./experiments/) directory, we provide the original script
 
 ## Docker
 
-We provide four docker images for easy environment setup:
+We provide four docker images:
 
 - `ghcr.io/z-lab/paroquant:latest` for optimization and non-reasoning task evaluation
 - `ghcr.io/z-lab/paroquant:chat` for running the chat app
 - `ghcr.io/z-lab/paroquant:chat-cu130` for running the chat app with CUDA 13.0
 - `ghcr.io/z-lab/paroquant:eval-reasoning` for reasoning task evaluation
-
-Use the following command to create a container and activate an interactive shell:
 
 ```
 docker run -it --gpus all --ipc=host ghcr.io/z-lab/paroquant:<tag>

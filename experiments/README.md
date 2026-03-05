@@ -16,7 +16,7 @@ To quantize and optimize a model with ParoQuant:
 
 We adjust the batch size, learning rate, and number of training samples for LLaMA-3-70B. Please use [`experiments/optimize/4bit_70b.sh`](./optimize/4bit_70b.sh) instead for LLaMA-3-70B.
 
-The optimized checkpoints will be saved to `./output/<model_name>`. To create a Hugging Face model with the checkpoints, use [`paroquant/cli/pseudo_quant.py`](../paroquant/cli/pseudo_quant.py).
+The optimized checkpoints will be saved to `./output/<model_name>`. To create a Hugging Face model with the checkpoints, use [`paroquant/cli/convert.py`](../paroquant/cli/convert.py) (`--mode pseudo` for pseudo-quantized, `--mode real` for INT4).
 
 ## Baselines
 

@@ -1,5 +1,3 @@
-"""MLX inference backend — streaming generation on Apple Silicon (LLM + VLM)."""
-
 from __future__ import annotations
 
 import time

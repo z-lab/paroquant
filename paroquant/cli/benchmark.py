@@ -1,10 +1,3 @@
-"""Benchmark ParoQuant generation throughput across backends.
-
-    python -m paroquant.cli.benchmark --model z-lab/Qwen3.5-0.8B-PARO-mm --backend mlx
-    python -m paroquant.cli.benchmark --model z-lab/Qwen3.5-0.8B-PARO-mm --backend vllm
-    python -m paroquant.cli.benchmark --model z-lab/Qwen3.5-0.8B-PARO-mm --backend transformers
-"""
-
 import argparse
 import asyncio
 import time

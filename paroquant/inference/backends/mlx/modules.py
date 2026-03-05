@@ -1,5 +1,3 @@
-"""RotateQuantizedLinear — pairwise rotation + INT4 quantized matmul for MLX."""
-
 import math
 
 import mlx.core as mx

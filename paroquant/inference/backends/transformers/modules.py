@@ -1,5 +1,3 @@
-"""RotateQuantizedLinear — pairwise rotation + INT4 AWQ GEMM for PyTorch."""
-
 from __future__ import annotations
 
 import torch
