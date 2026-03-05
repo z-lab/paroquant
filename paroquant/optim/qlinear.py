@@ -38,9 +38,7 @@ class PseudoQuantizedLinear(nn.Module):
             assert mask.shape == angles_grouped.shape
 
         num_rotations = (
-            torch.tensor(num_rotations, device="cuda")
-            if not isinstance(num_rotations, torch.Tensor)
-            else num_rotations
+            torch.tensor(num_rotations, device="cuda") if not isinstance(num_rotations, torch.Tensor) else num_rotations
         )
         self.register_buffer("num_rotations", num_rotations)
 
@@ -50,18 +48,10 @@ class PseudoQuantizedLinear(nn.Module):
             self.bias = nn.Parameter(linear.bias.clone())
         if rotation_pairs is None:
             # generate dummy pairs & angles if rotation_pairs is None
-            angles_grouped = torch.zeros(
-                num_rotations, self.in_feat // 2, device="cuda", dtype=self.weight.dtype
-            )
-            single_group_idx_ij = torch.randperm(
-                group_size, device="cuda", dtype=torch.short
-            )
+            angles_grouped = torch.zeros(num_rotations, self.in_feat // 2, device="cuda", dtype=self.weight.dtype)
+            single_group_idx_ij = torch.randperm(group_size, device="cuda", dtype=torch.short)
             one_krot_layer_idx_ij = single_group_idx_ij.repeat(num_groups)
-            pairs_grouped = (
-                one_krot_layer_idx_ij.unsqueeze(0)
-                .expand(num_rotations, -1)
-                .contiguous()
-            )
+            pairs_grouped = one_krot_layer_idx_ij.unsqueeze(0).expand(num_rotations, -1).contiguous()
             mask = torch.zeros_like(angles_grouped, device="cuda", dtype=torch.bool)
         else:
             pairs_grouped, angles_grouped, mask = rotation_pairs
@@ -71,9 +61,7 @@ class PseudoQuantizedLinear(nn.Module):
         self.register_buffer("mask", mask)
         if channel_scales is None:
             # generate dummy channel scales
-            channel_scales = torch.ones(
-                self.in_feat, device="cuda", dtype=self.weight.dtype
-            )
+            channel_scales = torch.ones(self.in_feat, device="cuda", dtype=self.weight.dtype)
         self.channel_scales = nn.Parameter(channel_scales)
         assert self.pairs_grouped.dtype == torch.short, self.pairs_grouped.dtype
         assert self.channel_scales.dtype == self.weight.dtype, (
@@ -85,17 +73,11 @@ class PseudoQuantizedLinear(nn.Module):
         self.quantizer: UniformAffineQuantizer | None = None
         self.register_buffer("quantizer_optim_enabled", torch.tensor(False))
         n_bits = n_bits if isinstance(n_bits, torch.Tensor) else torch.tensor(n_bits)
-        group_size = (
-            group_size
-            if isinstance(group_size, torch.Tensor)
-            else torch.tensor(group_size)
-        )
+        group_size = group_size if isinstance(group_size, torch.Tensor) else torch.tensor(group_size)
         self.register_buffer("n_bits", n_bits)
         self.register_buffer("group_size", group_size)
 
-    def forward(
-        self, x: torch.Tensor, weight_update: torch.Tensor | None = None
-    ) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, weight_update: torch.Tensor | None = None) -> torch.Tensor:
         weight = self.weight
         if weight_update is not None:
             weight = weight + weight_update
@@ -222,9 +204,7 @@ class PseudoQuantizedLinear(nn.Module):
 
         pairs_grouped = state_dict["pairs_grouped"]
         angles_grouped = state_dict["angles_grouped"]
-        mask = state_dict.get(
-            "mask", torch.zeros_like(angles_grouped, dtype=torch.bool)
-        )
+        mask = state_dict.get("mask", torch.zeros_like(angles_grouped, dtype=torch.bool))
 
         qlinear = PseudoQuantizedLinear(
             linear,

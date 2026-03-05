@@ -116,9 +116,7 @@ async def run_chat_app(config: ChatAppConfig):
             )
 
             console.print("[assistant]Assistant[/assistant]: ", end="")
-            generation_ctx = (
-                contextlib.nullcontext() if config.debug else _silence_stderr()
-            )
+            generation_ctx = contextlib.nullcontext() if config.debug else _silence_stderr()
             with generation_ctx:
                 result = await generator.generate(
                     history,
@@ -136,10 +134,7 @@ async def run_chat_app(config: ChatAppConfig):
 
             s = result.stats
             ttft = f"{s.ttft * 1000:.2f}ms" if s.ttft is not None else "n/a"
-            metrics = (
-                f"tokens={s.num_tokens} | latency={s.latency:.2f}s"
-                f" | ttft={ttft} | tps={s.tps:.2f}"
-            )
+            metrics = f"tokens={s.num_tokens} | latency={s.latency:.2f}s" f" | ttft={ttft} | tps={s.tps:.2f}"
             console.print(f"Metrics: {metrics}", style="hint", highlight=False)
             console.print()
     finally:
@@ -147,12 +142,8 @@ async def run_chat_app(config: ChatAppConfig):
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        description="Interactive terminal chat for ParoQuant models"
-    )
-    parser.add_argument(
-        "--model", type=str, required=True, help="Path to checkpoint or HF model id"
-    )
+    parser = argparse.ArgumentParser(description="Interactive terminal chat for ParoQuant models")
+    parser.add_argument("--model", type=str, required=True, help="Path to checkpoint or HF model id")
     parser.add_argument(
         "--backend",
         type=str,
@@ -166,9 +157,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=16384,
         help="Maximum number of tokens to generate",
     )
-    parser.add_argument(
-        "--temperature", type=float, default=0.6, help="Sampling temperature"
-    )
+    parser.add_argument("--temperature", type=float, default=0.6, help="Sampling temperature")
     parser.add_argument("--top-p", type=float, default=1.0, help="Top-p sampling")
     parser.add_argument("--top-k", type=int, default=32, help="Top-k sampling")
     parser.add_argument(

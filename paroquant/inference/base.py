@@ -11,6 +11,7 @@ from dataclasses import dataclass
 @dataclass
 class GenerationParams:
     """Sampling parameters (follows vLLM SamplingParams convention)."""
+
     max_tokens: int = 512
     temperature: float = 0.6
     top_p: float = 1.0
@@ -40,7 +41,8 @@ class BaseGenerator(ABC):
         messages: list[dict[str, str]],
         params: GenerationParams,
         on_text: Callable[[str], None] | None = None,
-    ) -> GenerationResult: ...
+    ) -> GenerationResult:
+        ...
 
     async def close(self) -> None:
         pass
@@ -52,11 +54,16 @@ def build_prompt(tokenizer, messages: list[dict[str, str]], enable_thinking: boo
         return messages[-1]["content"]
     try:
         return tokenizer.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True, enable_thinking=enable_thinking,
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
+            enable_thinking=enable_thinking,
         )
     except TypeError:
         return tokenizer.apply_chat_template(
-            messages, tokenize=False, add_generation_prompt=True,
+            messages,
+            tokenize=False,
+            add_generation_prompt=True,
         )
 
 
@@ -77,6 +84,6 @@ def create_generator(backend: str, model: str, **kwargs) -> BaseGenerator:
     try:
         cls = getattr(importlib.import_module(module_path), class_name)
     except (ImportError, ModuleNotFoundError) as e:
-        raise ImportError(f"Backend {backend!r} requires: pip install \"{install_hint}\"") from e
+        raise ImportError(f'Backend {backend!r} requires: pip install "{install_hint}"') from e
 
     return cls(model=model, **kwargs)

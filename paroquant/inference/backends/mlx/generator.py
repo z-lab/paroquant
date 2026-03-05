@@ -24,18 +24,27 @@ class MlxGenerator(BaseGenerator):
 
         if not self.is_vlm:
             from mlx_lm.generate import stream_generate
+
             return stream_generate(
-                self.model, self.processor, prompt,
-                max_tokens=params.max_tokens, sampler=sampler,
+                self.model,
+                self.processor,
+                prompt,
+                max_tokens=params.max_tokens,
+                sampler=sampler,
             )
 
         from mlx_vlm import stream_generate
+
         tokenizer = getattr(self.processor, "tokenizer", self.processor)
         input_ids = None if image else mx.array(tokenizer.encode(prompt))[None]
         return stream_generate(
-            self.model, self.processor, prompt,
-            image=image, input_ids=input_ids,
-            max_tokens=params.max_tokens, sampler=sampler,
+            self.model,
+            self.processor,
+            prompt,
+            image=image,
+            input_ids=input_ids,
+            max_tokens=params.max_tokens,
+            sampler=sampler,
             skip_special_tokens=True,
         )
 

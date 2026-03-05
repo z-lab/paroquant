@@ -14,7 +14,6 @@ from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
-
 def get_blocks(model: nn.Module) -> nn.ModuleList:
     model_class_name = model.__class__.__name__
     if model_class_name in (
@@ -33,9 +32,7 @@ def get_blocks(model: nn.Module) -> nn.ModuleList:
 _Linear_T = TypeVar("Linear", bound=nn.Module)
 
 
-def get_named_linears(
-    module: nn.Module, subclass: type[_Linear_T] = nn.Linear
-) -> dict[str, _Linear_T]:
+def get_named_linears(module: nn.Module, subclass: type[_Linear_T] = nn.Linear) -> dict[str, _Linear_T]:
     return {name: m for name, m in module.named_modules() if isinstance(m, subclass)}
 
 
@@ -60,12 +57,8 @@ def set_module_by_name(layer, name, new_module):
         setattr(layer, name, new_module)
 
 
-def load_model(
-    model_path: str, device_map: str | None = None, dtype=torch.float32, **kwargs
-) -> nn.Module:
-    model = AutoModelForCausalLM.from_pretrained(
-        model_path, device_map=device_map, torch_dtype=dtype, **kwargs
-    )
+def load_model(model_path: str, device_map: str | None = None, dtype=torch.float32, **kwargs) -> nn.Module:
+    model = AutoModelForCausalLM.from_pretrained(model_path, device_map=device_map, torch_dtype=dtype, **kwargs)
     return model
 
 
@@ -106,9 +99,7 @@ def get_mixed_calib_dataset(
     per_dataset_len = n_samples // len(datasets)
     results = []
     for i, dataset in enumerate(datasets):
-        dataset_samples = (
-            per_dataset_len if i < len(datasets) - 1 else n_samples - len(results)
-        )
+        dataset_samples = per_dataset_len if i < len(datasets) - 1 else n_samples - len(results)
         results.extend(
             get_calib_dataset(
                 data=dataset,
@@ -119,9 +110,7 @@ def get_mixed_calib_dataset(
                 split=split,
             )
         )
-    assert (
-        len(results) == n_samples
-    ), f"Expected {n_samples} samples, got {len(results)}"
+    assert len(results) == n_samples, f"Expected {n_samples} samples, got {len(results)}"
 
     rand = random.Random(seed)
     rand.shuffle(results)
@@ -175,9 +164,7 @@ def get_calib_dataset(
         if split == "test":
             dataset = dataset.select(range(len(dataset) - test_size, len(dataset)))
         elif split == "validation":
-            dataset = dataset.select(
-                range(len(dataset) - test_size - val_size, len(dataset) - test_size)
-            )
+            dataset = dataset.select(range(len(dataset) - test_size - val_size, len(dataset) - test_size))
         elif split == "train":
             dataset = dataset.select(range(0, train_size))
         else:
@@ -307,7 +294,6 @@ class CachedTensorShards:
         return len(self.batches)
 
     class Iterator:
-
         def __init__(self, batches: "CachedTensorShards"):
             self.batches = batches
             self.current_index = 0

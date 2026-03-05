@@ -4,7 +4,6 @@ import torch
 
 
 class RotateTensorFunc(torch.autograd.Function):
-
     @staticmethod
     def forward(ctx, x, idx_ij, theta, scale=None, group_size=128):
         """
@@ -43,28 +42,19 @@ class RotateTensorFunc(torch.autograd.Function):
         for i in range(KROT - 1, -1, -1):
             theta_neg = -theta[[i]]
             idx_chunk = idx_ij[[i]]
-            t_prev = torch.ops.rotation.rotate(
-                t, idx_chunk, theta_neg, None, GROUP_SIZE
-            )
-            g_prev = torch.ops.rotation.rotate(
-                g, idx_chunk, theta_neg, None, GROUP_SIZE
-            )
+            t_prev = torch.ops.rotation.rotate(t, idx_chunk, theta_neg, None, GROUP_SIZE)
+            g_prev = torch.ops.rotation.rotate(g, idx_chunk, theta_neg, None, GROUP_SIZE)
             # t_prev = apply_rotation_step(t, idx_chunk, theta_neg, GROUP_SIZE)
             # g_prev = apply_rotation_step(g, idx_chunk, theta_neg, GROUP_SIZE)
             idx_chunk = idx_chunk.view(num_groups, GROUP_SIZE)
-            group_offsets = (
-                torch.arange(num_groups, device=idx_ij.device, dtype=torch.int32)
-                * GROUP_SIZE
-            ).unsqueeze(1)
+            group_offsets = (torch.arange(num_groups, device=idx_ij.device, dtype=torch.int32) * GROUP_SIZE).unsqueeze(
+                1
+            )
             di = idx_chunk[:, 0:GROUP_SIZE:2] + group_offsets
             dj = idx_chunk[:, 1:GROUP_SIZE:2] + group_offsets
 
-            a = t_prev[:, di.reshape(-1)].view(
-                t_prev.size(0), num_groups, GROUP_SIZE // 2
-            )  # (B, G, GS/2)
-            b = t_prev[:, dj.reshape(-1)].view(
-                t_prev.size(0), num_groups, GROUP_SIZE // 2
-            )
+            a = t_prev[:, di.reshape(-1)].view(t_prev.size(0), num_groups, GROUP_SIZE // 2)  # (B, G, GS/2)
+            b = t_prev[:, dj.reshape(-1)].view(t_prev.size(0), num_groups, GROUP_SIZE // 2)
             ga = g[:, di.reshape(-1)].view(g.size(0), num_groups, GROUP_SIZE // 2)
             gb = g[:, dj.reshape(-1)].view(g.size(0), num_groups, GROUP_SIZE // 2)
 

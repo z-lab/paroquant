@@ -39,7 +39,8 @@ def _convert_autoawq(weights: dict, group_size: int) -> dict:
     """Convert AutoAWQ int32 checkpoint to MLX quantized format."""
     prefixes = {
         k.removesuffix("qweight")
-        for k in weights if k.endswith(".qweight") and f"{k[:-len('qweight')]}theta" in weights
+        for k in weights
+        if k.endswith(".qweight") and f"{k[:-len('qweight')]}theta" in weights
     }
     if not prefixes:
         return weights
@@ -51,7 +52,7 @@ def _convert_autoawq(weights: dict, group_size: int) -> dict:
             out[key] = val
             continue
 
-        suffix = key[len(pfx):]
+        suffix = key[len(pfx) :]
         if suffix == "qweight":
             out[f"{pfx}weight"] = mx.array(_pack_mlx(_unpack_and_reorder(np.array(val)).T))
         elif suffix == "scales":
@@ -70,12 +71,14 @@ def _create_model(config: dict, is_vlm: bool):
     """Instantiate model from config, dispatching to mlx_vlm or mlx_lm."""
     if is_vlm:
         from mlx_vlm.utils import get_model_and_args, update_module_configs
+
         mod, _ = get_model_and_args(config=config)
         cfg = mod.ModelConfig.from_dict(config)
         cfg = update_module_configs(cfg, mod, config, ["text", "vision", "perceiver", "projector", "audio"])
         return mod.Model(cfg)
 
     from mlx_lm.utils import _get_classes
+
     model_class, model_args_class = _get_classes(config)
     return model_class(model_args_class.from_dict(config))
 
@@ -84,9 +87,11 @@ def _load_processor(local_dir: Path, model, is_vlm: bool):
     """Load tokenizer (LLM) or processor (VLM)."""
     if not is_vlm:
         from mlx_lm.utils import load_tokenizer
+
         return load_tokenizer(local_dir)
 
     from mlx_vlm.utils import load_image_processor, load_processor
+
     try:
         processor = load_processor(local_dir, trust_remote_code=True)
         image_processor = load_image_processor(local_dir)
@@ -97,6 +102,7 @@ def _load_processor(local_dir: Path, model, is_vlm: bool):
         pass
 
     from mlx_vlm.utils import load_tokenizer
+
     processor = load_tokenizer(local_dir)
     if not hasattr(processor, "stopping_criteria"):
         eos = getattr(model.config, "eos_token_id", None)
@@ -126,12 +132,14 @@ def _patch_rotation_layers(model, weights: dict, bits: int, group_size: int):
     for prefix in sorted(k.removesuffix(".theta") for k in weights if k.endswith(".theta")):
         original = _get_module(model, prefix)
         _set_module(
-            model, prefix,
+            model,
+            prefix,
             RotateQuantizedLinear(
                 input_dims=original.weight.shape[-1],
                 output_dims=original.weight.shape[0],
                 bias="bias" in original,
-                group_size=group_size, bits=bits,
+                group_size=group_size,
+                bits=bits,
                 krot=weights[f"{prefix}.theta"].shape[0],
             ),
         )

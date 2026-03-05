@@ -42,9 +42,7 @@ class UniformAffineQuantizer(nn.Module):
         self.register_buffer("group_size", group_size)
         assert weight.shape[-1] % group_size == 0
 
-        scale, zero_point_float = _calc_scales_and_zero_points(
-            weight, group_size, self.qmin, self.qmax
-        )
+        scale, zero_point_float = _calc_scales_and_zero_points(weight, group_size, self.qmin, self.qmax)
         self.scale = nn.Parameter(scale)
         self.zero_point_float = nn.Parameter(zero_point_float)
 

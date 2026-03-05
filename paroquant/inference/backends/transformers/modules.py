@@ -8,6 +8,7 @@ import torch.nn as nn
 # AutoAWQ's GEMM kernel imports PytorchGELUTanh from transformers.activations,
 # but it was removed in transformers >=4.55. Provide a stub until AutoAWQ is updated.
 import transformers.activations as _act
+
 if not hasattr(_act, "PytorchGELUTanh"):
     _act.PytorchGELUTanh = _act.GELUActivation
 
@@ -22,8 +23,15 @@ class RotateQuantizedLinear(nn.Module):
     This enables native HuggingFace weight loading via ``from_pretrained``.
     """
 
-    def __init__(self, in_features: int, out_features: int, bias: bool = False,
-                 group_size: int = 128, bits: int = 4, krot: int = 8):
+    def __init__(
+        self,
+        in_features: int,
+        out_features: int,
+        bias: bool = False,
+        group_size: int = 128,
+        bits: int = 4,
+        krot: int = 8,
+    ):
         super().__init__()
         self.in_features = in_features
         self.out_features = out_features
@@ -55,7 +63,13 @@ class RotateQuantizedLinear(nn.Module):
             x = x.half()
         x = torch.ops.rotation.rotate(x, self.pairs, self.theta, self.channel_scales)
         out = WQLinearMMFunction.apply(
-            x, self.qweight, self.qzeros, self.scales,
-            self.w_bit, self.group_size, self.bias, self.out_features,
+            x,
+            self.qweight,
+            self.qzeros,
+            self.scales,
+            self.w_bit,
+            self.group_size,
+            self.bias,
+            self.out_features,
         )
         return out.reshape(out_shape)

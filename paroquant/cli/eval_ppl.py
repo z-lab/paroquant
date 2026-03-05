@@ -49,7 +49,9 @@ def _get_eval_tokens(name: str, seed: int, seqlen: int, tokenizer) -> torch.Tens
 
 def _load_model(path: str):
     model = AutoModelForCausalLM.from_pretrained(
-        path, torch_dtype=torch.bfloat16, device_map="auto",
+        path,
+        torch_dtype=torch.bfloat16,
+        device_map="auto",
     )
     if "AWQ" in path:
         model = model.model

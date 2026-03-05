@@ -78,7 +78,6 @@ def _rotation_weight_loader(
 
 @register_quantization_config("paroquant")
 class ParoQuantConfig(QuantizationConfig):
-
     def __init__(self, bits: int, group_size: int, krot: int, modules_to_not_convert: list[str] | None = None) -> None:
         super().__init__()
         if bits not in _QUANT_TYPE:
@@ -135,9 +134,7 @@ class ParoQuantConfig(QuantizationConfig):
         }
         # Strip "model." prefix so names match vLLM's internal module prefixes
         # (safetensors keys use "model.X" but vLLM's get_quant_method receives "X").
-        self.modules_to_not_convert = [
-            k.removeprefix("model.") for k in (all_layers - quant_layers)
-        ]
+        self.modules_to_not_convert = [k.removeprefix("model.") for k in (all_layers - quant_layers)]
 
     def get_quant_method(self, layer: torch.nn.Module, prefix: str) -> LinearMethodBase | None:
         if not isinstance(layer, LinearBase):

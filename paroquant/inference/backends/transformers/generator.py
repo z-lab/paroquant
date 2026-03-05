@@ -52,15 +52,18 @@ class TransformersGenerator(BaseGenerator):
         inputs = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)
 
         streamer = TextIteratorStreamer(self.tokenizer, skip_prompt=True, skip_special_tokens=True)
-        thread = Thread(target=self.model.generate, kwargs={
-            **inputs,
-            "streamer": streamer,
-            "max_new_tokens": params.max_tokens,
-            "do_sample": params.temperature > 0,
-            "temperature": params.temperature if params.temperature > 0 else None,
-            "top_k": params.top_k if params.top_k > 0 else None,
-            "top_p": params.top_p,
-        })
+        thread = Thread(
+            target=self.model.generate,
+            kwargs={
+                **inputs,
+                "streamer": streamer,
+                "max_new_tokens": params.max_tokens,
+                "do_sample": params.temperature > 0,
+                "temperature": params.temperature if params.temperature > 0 else None,
+                "top_k": params.top_k if params.top_k > 0 else None,
+                "top_p": params.top_p,
+            },
+        )
         thread.start()
 
         start = time.perf_counter()

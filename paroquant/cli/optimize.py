@@ -88,9 +88,7 @@ class Config:
 
 
 def main():
-    args = simple_parsing.parse(
-        Config, add_option_string_dash_variants=simple_parsing.DashVariant.DASH
-    )
+    args = simple_parsing.parse(Config, add_option_string_dash_variants=simple_parsing.DashVariant.DASH)
     print(args)
 
     # Store the results in a subdirectory.
@@ -192,9 +190,7 @@ def main():
         return output_batched
 
     def set_checkpointing_enabled(module: nn.Module, enable: bool) -> None:
-        for linear in get_named_linears(
-            module, subclass=PseudoQuantizedLinear
-        ).values():
+        for linear in get_named_linears(module, subclass=PseudoQuantizedLinear).values():
             linear.enable_checkpoint = enable
 
     # Layerwise, multi-stage optimization.
@@ -202,12 +198,8 @@ def main():
         empty_cache()
         logger.info(f"Capturing original layer output...")
         # Original output of this layer.
-        og_layer_output_batches = forward_layer_batch(
-            layer, og_layer_input_batches, kwargs, store_device="cpu"
-        )
-        og_layer_val_output_batches = forward_layer_batch(
-            layer, og_layer_val_input_batches, kwargs, store_device="cpu"
-        )
+        og_layer_output_batches = forward_layer_batch(layer, og_layer_input_batches, kwargs, store_device="cpu")
+        og_layer_val_output_batches = forward_layer_batch(layer, og_layer_val_input_batches, kwargs, store_device="cpu")
 
         if layer_idx > 0:
             layer_input_batches = new_layer_output_batches
@@ -219,12 +211,8 @@ def main():
         train_input_batches = layer_input_batches
         train_output_batches = og_layer_output_batches
 
-        train_input_batches = CachedTensorShards(
-            train_input_batches, args.cache_shards, target_device=device
-        )
-        train_output_batches = CachedTensorShards(
-            train_output_batches, args.cache_shards, target_device=device
-        )
+        train_input_batches = CachedTensorShards(train_input_batches, args.cache_shards, target_device=device)
+        train_output_batches = CachedTensorShards(train_output_batches, args.cache_shards, target_device=device)
 
         val_input_batches = [b.to(device) for b in layer_val_input_batches]
         val_output_batches = [b.to(device) for b in og_layer_val_output_batches]
@@ -263,9 +251,7 @@ def main():
 
             num_pairs_factor = 0.5
             weight = old_module.weight.float()
-            weight_grouped = weight.view(weight.shape[0], -1, args.group_size).permute(
-                1, 0, 2
-            )
+            weight_grouped = weight.view(weight.shape[0], -1, args.group_size).permute(1, 0, 2)
 
             all_pairs = get_random_rotation_pairs(
                 weight_grouped,
@@ -275,16 +261,9 @@ def main():
                 seed=args.seed + layer_idx,
             )
 
-            all_pairs = [
-                torch.tensor(pairs, device="cpu", dtype=torch.int32)
-                for pairs in all_pairs
-            ]
-            initial_angles = [
-                torch.zeros(pairs.shape[0], device="cpu") for pairs in all_pairs
-            ]
-            initial_scales = torch.ones(
-                1, weight.shape[1], dtype=torch.float16, device=device
-            )
+            all_pairs = [torch.tensor(pairs, device="cpu", dtype=torch.int32) for pairs in all_pairs]
+            initial_angles = [torch.zeros(pairs.shape[0], device="cpu") for pairs in all_pairs]
+            initial_scales = torch.ones(1, weight.shape[1], dtype=torch.float16, device=device)
 
             npairs, angles, mask = transform_to_kernel_data(
                 all_pairs,
@@ -360,9 +339,7 @@ def main():
             empty_cache()
 
         else:
-            logger.info(
-                f"Skipping optimization for layer {layer_idx}: already been optimized."
-            )
+            logger.info(f"Skipping optimization for layer {layer_idx}: already been optimized.")
 
         layer.half().to(device)
 
@@ -388,9 +365,7 @@ def main():
             continue
 
         # Save the optimized result
-        for name, module in get_named_linears(
-            layer, subclass=PseudoQuantizedLinear
-        ).items():
+        for name, module in get_named_linears(layer, subclass=PseudoQuantizedLinear).items():
             result_file = output_dir / f"{layer_idx}.{name}.pt"
             torch.save(
                 module.state_dict(),

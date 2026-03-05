@@ -34,7 +34,11 @@ def _load_model(model_id: str, dtype: torch.dtype) -> torch.nn.Module:
 def _get_blocks(model: torch.nn.Module):
     if hasattr(model, "model") and hasattr(model.model, "layers"):
         return model.model.layers
-    if hasattr(model, "model") and hasattr(model.model, "language_model") and hasattr(model.model.language_model, "layers"):
+    if (
+        hasattr(model, "model")
+        and hasattr(model.model, "language_model")
+        and hasattr(model.model.language_model, "layers")
+    ):
         return model.model.language_model.layers
     if hasattr(model, "language_model") and hasattr(model.language_model, "layers"):
         return model.language_model.layers
@@ -196,7 +200,8 @@ def main() -> None:
             converted = _convert_state_dict(sd, device="cuda")
 
             rl = RotateQuantizedLinear(
-                module.in_features, module.out_features,
+                module.in_features,
+                module.out_features,
                 bias=module.bias is not None,
                 group_size=int(converted["group_size"]),
                 bits=int(converted["bits"]),

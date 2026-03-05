@@ -132,9 +132,7 @@ def optimize_module(
         return out
 
     @torch.no_grad()
-    def loss_batches(
-        input_batches: Iterator[torch.Tensor], output_batches: Iterator[torch.Tensor]
-    ) -> torch.Tensor:
+    def loss_batches(input_batches: Iterator[torch.Tensor], output_batches: Iterator[torch.Tensor]) -> torch.Tensor:
         total_loss = None
         for input_batch, output_batch in zip(input_batches, output_batches):
             output_q = module_output(input_batch)
@@ -189,8 +187,6 @@ def optimize_module(
         progress_bar.update(1)
 
     progress_bar.close()
-    logger.info(
-        f"Best val loss: {best_val_loss.item()}, Original val loss: {original_val_loss.item()}"
-    )
+    logger.info(f"Best val loss: {best_val_loss.item()}, Original val loss: {original_val_loss.item()}")
 
     module.load_state_dict(best_sd)
