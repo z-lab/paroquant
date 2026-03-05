@@ -5,10 +5,10 @@ from __future__ import annotations
 import time
 from collections.abc import Callable
 
-from paroquant.inference.base import UnifiedGenerator, GenerationParams, GenerationResult, GenerationStats, build_prompt
+from paroquant.inference.base import BaseGenerator, GenerationParams, GenerationResult, GenerationStats, build_prompt
 
 
-class Generator(UnifiedGenerator):
+class MlxGenerator(BaseGenerator):
     def __init__(self, model: str, enable_thinking: bool = False):
         from .load import load
 

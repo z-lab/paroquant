@@ -1,5 +1,5 @@
-"""ParoQuant MLX backend — Pairwise Rotation Quantization for MLX on Apple Silicon."""
+"""ParoQuant MLX backend."""
 
-from .generator import Generator
+from .generator import MlxGenerator
 
-__all__ = ["Generator"]
+__all__ = ["MlxGenerator"]

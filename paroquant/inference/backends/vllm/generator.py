@@ -5,10 +5,10 @@ from collections.abc import Callable
 
 from transformers import AutoTokenizer
 
-from paroquant.inference.base import UnifiedGenerator, GenerationParams, GenerationResult, GenerationStats, build_prompt
+from paroquant.inference.base import BaseGenerator, GenerationParams, GenerationResult, GenerationStats, build_prompt
 
 
-class Generator(UnifiedGenerator):
+class VllmGenerator(BaseGenerator):
     def __init__(
         self,
         model: str,

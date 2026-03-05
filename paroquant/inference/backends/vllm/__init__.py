@@ -1,5 +1,5 @@
 """ParoQuant vLLM backend."""
 
-from .generator import Generator
+from .generator import VllmGenerator
 
-__all__ = ["Generator"]
+__all__ = ["VllmGenerator"]

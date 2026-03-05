@@ -234,7 +234,7 @@ class ParoQuantLinearMethod(LinearMethodBase):
 
         global _kernels_loaded
         if not _kernels_loaded:
-            import paroquant.kernels  # noqa: F401
+            import paroquant.kernels.cuda  # noqa: F401
             _kernels_loaded = True
 
         outputs = []

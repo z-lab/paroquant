@@ -69,7 +69,7 @@ def load(path: str) -> nn.Module:
             attn_implementation="sdpa", device_map="cuda",
         )
 
-    import paroquant.kernels  # noqa: F401 — registers torch.ops.rotation.rotate
+    import paroquant.kernels.cuda  # noqa: F401 — registers torch.ops.rotation.rotate
 
     bits = qcfg.get("bits", 4)
     group_size = qcfg.get("group_size", 128)

@@ -14,13 +14,13 @@ if os.environ.get("PAROQUANT_SKIP_CUDA", "0") != "1":
     try:
         from torch.utils.cpp_extension import CUDAExtension, BuildExtension
 
-        kernel_dir = "paroquant/kernels"
+        cuda_dir = "paroquant/kernels/cuda"
         ext_modules.append(
             CUDAExtension(
                 "paroquant_kernels._C",
                 [
-                    f"{kernel_dir}/pybind.cpp",
-                    f"{kernel_dir}/rotation.cu",
+                    f"{cuda_dir}/pybind.cpp",
+                    f"{cuda_dir}/rotation.cu",
                 ],
                 extra_compile_args={
                     "cxx": ["-O2", "-std=c++17", "-DENABLE_BF16"],
@@ -55,6 +55,6 @@ setup(
         "paroquant_kernels",
     ] if ext_modules else [],
     package_dir={
-        "paroquant_kernels": "paroquant/kernels",
+        "paroquant_kernels": "paroquant/kernels/cuda",
     } if ext_modules else {},
 )

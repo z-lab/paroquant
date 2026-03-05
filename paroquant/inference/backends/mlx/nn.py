@@ -2,10 +2,20 @@
 
 import math
 
+import numpy as np
 import mlx.core as mx
 import mlx.nn as nn
 
-from .rotation import _get_kernel, pack_pairs
+from paroquant.kernels.metal import get_rotation_kernel
+
+
+def _pack_pairs(pairs: mx.array, group_size: int) -> mx.array:
+    """Pack raw int16 pair indices into int32 for the Metal kernel."""
+    krot, hidden_size = int(pairs.shape[0]), int(pairs.shape[1])
+    num_groups = hidden_size // group_size
+    p = np.array(pairs, copy=False).reshape(krot, num_groups, group_size).astype(np.int32, copy=False)
+    packed = p[:, :, 0::2] | (p[:, :, 1::2] << 16)
+    return mx.array(packed.reshape(krot, -1))
 
 
 class RotateQuantizedLinear(nn.Module):
@@ -48,7 +58,7 @@ class RotateQuantizedLinear(nn.Module):
 
         self._cos_theta = mx.cos(self.theta)
         self._sin_theta = mx.sin(self.theta)
-        self._packed_pairs = pack_pairs(self.pairs, self.group_size)
+        self._packed_pairs = _pack_pairs(self.pairs, self.group_size)
         self._channel_scales_flat = self.channel_scales.reshape(-1)
 
         self._setup_done = True
@@ -65,7 +75,7 @@ class RotateQuantizedLinear(nn.Module):
             self._num_groups,
             1,
         )
-        return _get_kernel(rows_per_tile)(
+        return get_rotation_kernel(rows_per_tile)(
             inputs=[x, self._packed_pairs, self._cos_theta, self._sin_theta, self._channel_scales_flat, params],
             output_shapes=[x.shape],
             output_dtypes=[x.dtype],

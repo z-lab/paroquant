@@ -8,11 +8,11 @@ from threading import Thread
 
 from transformers import AutoTokenizer, TextIteratorStreamer
 
-from paroquant.inference.base import UnifiedGenerator, GenerationParams, GenerationResult, GenerationStats, build_prompt
+from paroquant.inference.base import BaseGenerator, GenerationParams, GenerationResult, GenerationStats, build_prompt
 from .load import load
 
 
-class Generator(UnifiedGenerator):
+class TransformersGenerator(BaseGenerator):
     def __init__(self, model: str, trust_remote_code: bool = True, enable_thinking: bool = False):
         self.model = load(model)
         self.model.eval()

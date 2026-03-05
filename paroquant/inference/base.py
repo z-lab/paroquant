@@ -32,7 +32,7 @@ class GenerationResult:
     stats: GenerationStats
 
 
-class UnifiedGenerator(ABC):
+class BaseGenerator(ABC):
     @abstractmethod
     async def generate(
         self,
@@ -60,13 +60,13 @@ def build_prompt(tokenizer, messages: list[dict[str, str]], enable_thinking: boo
 
 
 _BACKENDS = {
-    "transformers": ("paroquant.inference.backends.transformers", "Generator", "paroquant[transformers]"),
-    "vllm": ("paroquant.inference.backends.vllm", "Generator", "paroquant[vllm]"),
-    "mlx": ("paroquant.inference.backends.mlx", "Generator", "paroquant[mlx]"),
+    "transformers": ("paroquant.inference.backends.transformers", "TransformersGenerator", "paroquant[transformers]"),
+    "vllm": ("paroquant.inference.backends.vllm", "VllmGenerator", "paroquant[vllm]"),
+    "mlx": ("paroquant.inference.backends.mlx", "MlxGenerator", "paroquant[mlx]"),
 }
 
 
-def create_generator(backend: str, model: str, **kwargs) -> UnifiedGenerator:
+def create_generator(backend: str, model: str, **kwargs) -> BaseGenerator:
     """Factory that instantiates the right backend by name."""
     key = backend.lower()
     if key not in _BACKENDS:
