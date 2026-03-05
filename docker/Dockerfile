@@ -40,13 +40,8 @@ ENV VIRTUAL_ENV=/opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 ENV TORCH_CUDA_ARCH_LIST="8.0 8.6 8.7 8.9 9.0 10.0 12.0"
 
-COPY requirements.txt .
-
-RUN pip install -r requirements.txt --no-cache-dir
-
-COPY ./kernels ./kernels
-RUN pip install ./kernels --no-cache-dir --no-build-isolation
-
 COPY . .
+
+RUN pip install -e ".[optim,eval]" --no-cache-dir --no-build-isolation
 
 CMD ["/bin/bash"]

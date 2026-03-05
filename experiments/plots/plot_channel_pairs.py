@@ -11,7 +11,7 @@ sys.path.extend(
 )
 
 from paroquant_kernels import scaled_pairwise_rotation
-from paroquant.module import PseudoQuantizedLinear
+from paroquant.optim.module import PseudoQuantizedLinear
 
 # Init plotting formats
 from plot_init import *

@@ -40,17 +40,20 @@ cd paroquant
 Install dependencies:
 
 ```bash
-# use conda (recommended)
-conda env create -f environment.yml
-conda activate paroquant
-pip install ./kernels --no-build-isolation
+# GPU — optimization & evaluation (builds CUDA rotation kernel automatically)
+pip install -e ".[optim,eval]" --no-build-isolation
 
-# or use pip
-pip install -r requirements.txt
-pip install ./kernels --no-build-isolation
+# GPU — Transformers inference (chat)
+pip install -e ".[transformers]" --no-build-isolation
+
+# GPU — vLLM inference (chat)
+pip install -e ".[vllm]" --no-build-isolation
+
+# Apple Silicon — MLX inference (no CUDA build needed)
+pip install -e ".[mlx]"
 ```
 
-You may need to modify [`requirements.txt`](requirements.txt) to match your CUDA version.
+You may need to adjust the PyTorch version in [`pyproject.toml`](pyproject.toml) to match your CUDA version.
 
 ## Usage
 
@@ -66,13 +69,13 @@ Then, create a huggingface model with pseudo quantization (*i.e.,* model weights
 
 ```bash
 # pseudo quantization
-python3 scripts/pseudo_quant.py \
+python3 -m paroquant.cli.pseudo_quant \
     --model Qwen/Qwen3-8B \
     --result-dir output/Qwen3-8B \
     --output-path models/Qwen3-8B-PARO-pseudo
 
 # real quantization
-python3 scripts/real_quant.py \
+python3 -m paroquant.cli.real_quant \
     --model Qwen/Qwen3-8B \
     --result-dir output/Qwen3-8B \
     --output-path models/Qwen3-8B-PARO
@@ -93,7 +96,7 @@ To run a real-quantized model with vLLM and open an interactive chat:
 docker run --rm -it --gpus all --ipc=host ghcr.io/z-lab/paroquant:chat --model z-lab/Qwen3-8B-PARO
 
 # without docker
-python3 scripts/interactive_gen.py --model z-lab/Qwen3-8B-PARO
+python3 -m paroquant.cli.chat --model z-lab/Qwen3-8B-PARO
 ```
 
 ## Models

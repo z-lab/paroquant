@@ -1,0 +1,55 @@
+[project]
+name = "paroquant"
+version = "0.1.0"
+requires-python = ">=3.11"
+description = "ParoQuant — Pairwise Rotation Quantization for LLMs"
+license = { text = "MIT" }
+dependencies = [
+    "rich",
+]
+
+[project.optional-dependencies]
+transformers = [
+    "torch==2.8.0",
+    "transformers==4.55.2",
+    "autoawq",
+]
+vllm = [
+    "vllm==0.15.1",
+    "accelerate==1.7.0",
+]
+mlx = [
+    "mlx",
+    "mlx-lm",
+    "numpy",
+    "transformers",
+    "safetensors",
+    "huggingface-hub",
+    "sentencepiece",
+    "protobuf",
+]
+optim = [
+    "paroquant[transformers]",
+    "datasets==3.6.0",
+    "simple_parsing==0.1.7",
+    "tqdm",
+]
+eval = [
+    "lm_eval==0.4.9.1",
+    "zstandard==0.23.0",
+]
+dev = [
+    "pytest",
+    "pre-commit",
+]
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["paroquant*"]
+
+[tool.black]
+line-length = 120
+target-version = ["py311"]
