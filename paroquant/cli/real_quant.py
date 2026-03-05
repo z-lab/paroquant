@@ -131,9 +131,9 @@ def _load_optimize_args(result_dir: Path) -> dict:
     return {}
 
 
-def _build_dynamic_quant_config(args_data: dict) -> dict[str, dict]:
+def _build_dynamic_quant_config(args_data: dict, model: torch.nn.Module) -> dict[str, dict]:
     skipped_modules = args_data.get("skipped_modules", [])
-    return {f"-:.*{keyword}*": {} for keyword in skipped_modules}
+    return {f"-:.*{keyword}": {} for keyword in skipped_modules}
 
 
 def _resolve_model_dir(model_id: str) -> Path | None:
@@ -142,6 +142,7 @@ def _resolve_model_dir(model_id: str) -> Path | None:
         return path
     try:
         from huggingface_hub import snapshot_download
+
         return Path(snapshot_download(repo_id=model_id))
     except Exception:
         return None
@@ -193,7 +194,11 @@ def _convert_state_dict(state_dict: dict, device: str) -> dict[str, torch.Tensor
         channel_scales_opt = channel_scales_opt.unsqueeze(0)
 
     rotated_weight = scaled_pairwise_rotation(
-        weight * channel_scales_opt, pairs, theta, None, group_size,
+        weight * channel_scales_opt,
+        pairs,
+        theta,
+        None,
+        group_size,
     )
 
     n_groups = in_features // group_size
@@ -312,7 +317,7 @@ def main() -> None:
         "group_size": config_group_size,
         "krot": config_krot,
     }
-    dynamic = _build_dynamic_quant_config(optimize_args)
+    dynamic = _build_dynamic_quant_config(args_data=optimize_args, model=model)
     if dynamic:
         quant_config["dynamic"] = dynamic
     model.config.quantization_config = quant_config
