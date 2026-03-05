@@ -28,13 +28,12 @@ The backend is auto-detected (MLX on Apple Silicon, vLLM on NVIDIA GPU). Overrid
 
 ## Models
 
+All models are available on [Hugging Face](https://huggingface.co/collections/z-lab/paroquant). Replace the model name in the commands above to try any of them.
+
+**Qwen3**
+
 | Model | HF Path |
 |---|---|
-| Llama-2-7B | [`z-lab/Llama-2-7b-hf-PARO`](https://huggingface.co/z-lab/Llama-2-7b-hf-PARO) |
-| Llama-3-8B | [`z-lab/Meta-Llama-3-8B-PARO`](https://huggingface.co/z-lab/Meta-Llama-3-8B-PARO) |
-| Llama-3-70B | [`z-lab/Meta-Llama-3-70B-PARO`](https://huggingface.co/z-lab/Meta-Llama-3-70B-PARO) |
-| Llama-3.1-8B-Instruct | [`z-lab/Llama-3.1-8B-Instruct-PARO`](https://huggingface.co/z-lab/Llama-3.1-8B-Instruct-PARO) |
-| DeepSeek-R1-Distill-Llama-8B | [`z-lab/DeepSeek-R1-Distill-Llama-8B-PARO`](https://huggingface.co/z-lab/DeepSeek-R1-Distill-Llama-8B-PARO) |
 | Qwen3-0.6B | [`z-lab/Qwen3-0.6B-PARO`](https://huggingface.co/z-lab/Qwen3-0.6B-PARO) |
 | Qwen3-1.7B | [`z-lab/Qwen3-1.7B-PARO`](https://huggingface.co/z-lab/Qwen3-1.7B-PARO) |
 | Qwen3-4B | [`z-lab/Qwen3-4B-PARO`](https://huggingface.co/z-lab/Qwen3-4B-PARO) |
@@ -42,9 +41,26 @@ The backend is auto-detected (MLX on Apple Silicon, vLLM on NVIDIA GPU). Overrid
 | Qwen3-14B | [`z-lab/Qwen3-14B-PARO`](https://huggingface.co/z-lab/Qwen3-14B-PARO) |
 | Qwen3-4B-Thinking-2507 | [`z-lab/Qwen3-4B-Thinking-2507-PARO`](https://huggingface.co/z-lab/Qwen3-4B-Thinking-2507-PARO) |
 
-Base (non-instruct) variants are also available: `z-lab/Qwen3-{0.6B,1.7B,4B,8B,14B}-Base-PARO`.
+Base (non-instruct) variants: `z-lab/Qwen3-{0.6B,1.7B,4B,8B,14B}-Base-PARO`
+
+**Llama**
+
+| Model | HF Path |
+|---|---|
+| Llama-2-7B | [`z-lab/Llama-2-7b-hf-PARO`](https://huggingface.co/z-lab/Llama-2-7b-hf-PARO) |
+| Llama-3-8B | [`z-lab/Meta-Llama-3-8B-PARO`](https://huggingface.co/z-lab/Meta-Llama-3-8B-PARO) |
+| Llama-3-70B | [`z-lab/Meta-Llama-3-70B-PARO`](https://huggingface.co/z-lab/Meta-Llama-3-70B-PARO) |
+| Llama-3.1-8B-Instruct | [`z-lab/Llama-3.1-8B-Instruct-PARO`](https://huggingface.co/z-lab/Llama-3.1-8B-Instruct-PARO) |
+
+**DeepSeek**
+
+| Model | HF Path |
+|---|---|
+| DeepSeek-R1-Distill-Llama-8B | [`z-lab/DeepSeek-R1-Distill-Llama-8B-PARO`](https://huggingface.co/z-lab/DeepSeek-R1-Distill-Llama-8B-PARO) |
 
 Optimization checkpoints and pseudo-quantized models: [`z-lab/paroquant-checkpoints`](https://huggingface.co/z-lab/paroquant-checkpoints).
+
+Want a model that's not listed? [Open an issue](https://github.com/z-lab/paroquant/issues/new) and we'll look into it.
 
 ## Installation
 
