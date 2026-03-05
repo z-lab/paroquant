@@ -1,23 +1,11 @@
 """vLLM inference backend — async streaming via AsyncLLMEngine."""
 
-import json
 import time
 from collections.abc import Callable
-from pathlib import Path
 
 from transformers import AutoTokenizer
 
 from paroquant.inference.base import UnifiedGenerator, GenerationParams, GenerationResult, GenerationStats, build_prompt
-
-
-def _read_quantization_config(model: str) -> dict | None:
-    """Read quantization_config directly from config.json (avoids AutoConfig model-type errors)."""
-    from huggingface_hub import hf_hub_download
-
-    path = hf_hub_download(model, "config.json") if not Path(model).is_dir() else f"{model}/config.json"
-    with open(path) as f:
-        qcfg = json.load(f).get("quantization_config")
-    return qcfg if isinstance(qcfg, dict) and qcfg.get("quant_method") == "paroquant" else None
 
 
 class Generator(UnifiedGenerator):
@@ -36,20 +24,9 @@ class Generator(UnifiedGenerator):
 
         self.enable_thinking = enable_thinking
 
-        hf_overrides: dict = {}
-        qcfg = _read_quantization_config(model)
-        if qcfg:
-            hf_overrides["quantization_config"] = {
-                "quant_method": "paroquant",
-                "bits": qcfg.get("bits", 4),
-                "group_size": qcfg.get("group_size", 128),
-                "krot": qcfg.get("krot", 8),
-            }
-
         engine_kwargs: dict = dict(
             model=model,
             trust_remote_code=trust_remote_code,
-            hf_overrides=hf_overrides,
             gpu_memory_utilization=gpu_memory_utilization,
             enforce_eager=enforce_eager,
         )
