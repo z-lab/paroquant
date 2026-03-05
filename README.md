@@ -1,6 +1,6 @@
 # ParoQuant
 
-**Pairwise Rotation Quantization for Efficient LLM Inference**
+**Pairwise Rotation Quantization for Efficient Reasoning LLM Inference**
 
 [Paper](https://arxiv.org/abs/2511.10645) |
 [Blog](https://paroquant.z-lab.ai) |
@@ -34,7 +34,7 @@ python -m paroquant.cli.chat --model z-lab/Qwen3-8B-PARO
 
 ## Models
 
-All models are available on the [Hugging Face collection](https://huggingface.co/collections/z-lab/paroquant). Swap the model name in the commands above to try any of them.
+All models are available on the [Hugging Face](https://huggingface.co/collections/z-lab/paroquant). Swap the model name in the commands above to try any of them.
 
 **Qwen3**
 
@@ -57,12 +57,6 @@ Base (non-instruct) variants are also available: `z-lab/Qwen3-{0.6B,1.7B,4B,8B,1
 | Llama-3-8B | [`z-lab/Meta-Llama-3-8B-PARO`](https://huggingface.co/z-lab/Meta-Llama-3-8B-PARO) |
 | Llama-3-70B | [`z-lab/Meta-Llama-3-70B-PARO`](https://huggingface.co/z-lab/Meta-Llama-3-70B-PARO) |
 | Llama-3.1-8B-Instruct | [`z-lab/Llama-3.1-8B-Instruct-PARO`](https://huggingface.co/z-lab/Llama-3.1-8B-Instruct-PARO) |
-
-**DeepSeek**
-
-| Model | |
-|---|---|
-| DeepSeek-R1-Distill-Llama-8B | [`z-lab/DeepSeek-R1-Distill-Llama-8B-PARO`](https://huggingface.co/z-lab/DeepSeek-R1-Distill-Llama-8B-PARO) |
 
 Want a model that's not listed? [Open an issue](https://github.com/z-lab/paroquant/issues/new) and let us know.
 
