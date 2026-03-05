@@ -41,8 +41,7 @@ async def run_chat_app(config: ChatAppConfig):
         warnings.filterwarnings("ignore")
         os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
         os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
-        if config.backend == "vllm":
-            os.environ.setdefault("VLLM_LOGGING_LEVEL", "ERROR")
+        os.environ.setdefault("VLLM_LOGGING_LEVEL", "ERROR")
         try:
             from huggingface_hub import disable_progress_bars
 
@@ -66,16 +65,20 @@ async def run_chat_app(config: ChatAppConfig):
         )
     )
 
+    from paroquant.inference.base import _detect_backend
+
+    backend = _detect_backend() if config.backend == "auto" else config.backend
+
     kwargs = {"enable_thinking": config.enable_thinking}
-    if config.backend == "vllm":
+    if backend == "vllm":
         kwargs["gpu_memory_utilization"] = config.gpu_memory_utilization
 
-    console.print("[hint]Loading model...[/hint]")
-    generator = create_generator(config.backend, config.model, **kwargs)
+    console.print(f"[hint]Loading model ({backend})...[/hint]")
+    generator = create_generator(backend, config.model, **kwargs)
 
     banner = (
         f"[bold]ParoQuant Chat[/bold]\n"
-        f"Backend: [bold]{config.backend}[/bold]\n"
+        f"Backend: [bold]{backend}[/bold]\n"
         f"Model: [bold]{config.model}[/bold]\n\n"
         f"Type [bold]/quit[/bold] to exit, [bold]/clear[/bold] to reset history."
     )
@@ -142,9 +145,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--backend",
         type=str,
-        default="vllm",
-        choices=["vllm", "transformers", "mlx"],
-        help="Generation backend",
+        default="auto",
+        choices=["auto", "vllm", "transformers", "mlx"],
+        help="Generation backend (auto: mlx on Apple Silicon, vllm on NVIDIA GPU)",
     )
     parser.add_argument(
         "--max-tokens",

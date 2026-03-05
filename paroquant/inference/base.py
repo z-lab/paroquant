@@ -72,9 +72,37 @@ _BACKENDS = {
 }
 
 
+def _detect_backend() -> str:
+    import platform
+
+    if platform.processor() == "arm" or platform.machine() == "arm64":
+        try:
+            import mlx.core  # noqa: F401
+
+            return "mlx"
+        except ImportError:
+            pass
+    try:
+        import torch
+
+        if torch.cuda.is_available():
+            try:
+                import vllm  # noqa: F401
+
+                return "vllm"
+            except ImportError:
+                return "transformers"
+    except ImportError:
+        pass
+    raise RuntimeError("No backend available. Install paroquant[mlx], paroquant[vllm], or paroquant[transformers].")
+
+
 def create_generator(backend: str, model: str, **kwargs) -> BaseGenerator:
     """Factory that instantiates the right backend by name."""
     key = backend.lower()
+    if key == "auto":
+        key = _detect_backend()
+
     if key not in _BACKENDS:
         raise ValueError(f"Unknown backend: {backend!r}. Choose from: {', '.join(_BACKENDS)}")
 

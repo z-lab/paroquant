@@ -65,11 +65,6 @@ def _pack_awq(values: torch.Tensor, bits: int = 4) -> torch.Tensor:
     return packed
 
 
-# ---------------------------------------------------------------------------
-# Pseudo-quantize: apply dequantized weights back to fp16 model
-# ---------------------------------------------------------------------------
-
-
 @torch.no_grad()
 def _convert_pseudo(model: torch.nn.Module, result_dir: Path) -> int:
     from paroquant.optim.qlinear import PseudoQuantizedLinear
@@ -87,11 +82,6 @@ def _convert_pseudo(model: torch.nn.Module, result_dir: Path) -> int:
             count += 1
         layer.cpu()
     return count
-
-
-# ---------------------------------------------------------------------------
-# Real quantize: pack into AutoAWQ int32 format with RotateQuantizedLinear
-# ---------------------------------------------------------------------------
 
 
 @torch.no_grad()
@@ -185,11 +175,6 @@ def _convert_real(model: torch.nn.Module, result_dir: Path) -> tuple[int, dict[s
         "krot": krot,
     }
     return count, quant_config
-
-
-# ---------------------------------------------------------------------------
-# CLI
-# ---------------------------------------------------------------------------
 
 
 @torch.no_grad()
