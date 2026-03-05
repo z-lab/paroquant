@@ -135,10 +135,10 @@ async def run_chat_app(config: ChatAppConfig):
             history.append({"role": "assistant", "content": result.output_text})
 
             s = result.stats
-            ttft = f"{s.ttft_s * 1000:.2f}ms" if s.ttft_s is not None else "n/a"
+            ttft = f"{s.ttft * 1000:.2f}ms" if s.ttft is not None else "n/a"
             metrics = (
-                f"tokens={s.token_count} | time={s.total_time_s:.2f}s"
-                f" | ttft={ttft} | tps={s.tokens_per_second:.2f}"
+                f"tokens={s.num_tokens} | latency={s.latency:.2f}s"
+                f" | ttft={ttft} | tps={s.tps:.2f}"
             )
             console.print(f"Metrics: {metrics}", style="hint", highlight=False)
             console.print()

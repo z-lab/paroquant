@@ -1,6 +1,8 @@
 """Model loading for the MLX backend (auto-detects LLM vs VLM)."""
 
-import importlib
+from __future__ import annotations
+
+import logging
 from pathlib import Path
 
 import mlx.core as mx
@@ -9,9 +11,7 @@ import numpy as np
 
 from .modules import RotateQuantizedLinear
 
-# ---------------------------------------------------------------------------
-# AutoAWQ → MLX weight conversion
-# ---------------------------------------------------------------------------
+logger = logging.getLogger(__name__)
 
 _BITS = 4
 _PF = 32 // _BITS
@@ -35,10 +35,12 @@ def _pack_mlx(w: np.ndarray) -> np.ndarray:
     return p
 
 
-def _convert_autoawq(weights, group_size):
+def _convert_autoawq(weights: dict, group_size: int) -> dict:
     """Convert AutoAWQ int32 checkpoint to MLX quantized format."""
-    prefixes = {k.removesuffix("qweight")
-                for k in weights if k.endswith(".qweight") and f"{k[:-len('qweight')]}theta" in weights}
+    prefixes = {
+        k.removesuffix("qweight")
+        for k in weights if k.endswith(".qweight") and f"{k[:-len('qweight')]}theta" in weights
+    }
     if not prefixes:
         return weights
 
@@ -64,11 +66,8 @@ def _convert_autoawq(weights, group_size):
     return out
 
 
-# ---------------------------------------------------------------------------
-# Model construction (LLM vs VLM)
-# ---------------------------------------------------------------------------
-
 def _create_model(config: dict, is_vlm: bool):
+    """Instantiate model from config, dispatching to mlx_vlm or mlx_lm."""
     if is_vlm:
         from mlx_vlm.utils import get_model_and_args, update_module_configs
         mod, _ = get_model_and_args(config=config)
@@ -76,53 +75,44 @@ def _create_model(config: dict, is_vlm: bool):
         cfg = update_module_configs(cfg, mod, config, ["text", "vision", "perceiver", "projector", "audio"])
         return mod.Model(cfg)
 
-    from mlx_lm.utils import MODEL_REMAPPING
-    model_type = MODEL_REMAPPING.get(config["model_type"], config["model_type"])
-    for name in (model_type, *(model_type.removesuffix(s) for s in ("_text", "_lm") if model_type.endswith(s))):
-        try:
-            arch = importlib.import_module(f"mlx_lm.models.{name}")
-            return arch.Model(arch.ModelArgs.from_dict(config))
-        except (ImportError, ModuleNotFoundError):
-            continue
-    raise ValueError(f"No mlx_lm model for model_type={model_type!r}")
+    from mlx_lm.utils import _get_classes
+    model_class, model_args_class = _get_classes(config)
+    return model_class(model_args_class.from_dict(config))
 
 
 def _load_processor(local_dir: Path, model, is_vlm: bool):
+    """Load tokenizer (LLM) or processor (VLM)."""
     if not is_vlm:
         from mlx_lm.utils import load_tokenizer
         return load_tokenizer(local_dir)
 
+    from mlx_vlm.utils import load_image_processor, load_processor
     try:
-        from mlx_vlm.utils import load_image_processor, load_processor
         processor = load_processor(local_dir, trust_remote_code=True)
         image_processor = load_image_processor(local_dir)
         if image_processor is not None:
             processor.image_processor = image_processor
         return processor
-    except Exception:
-        from mlx_vlm.utils import load_tokenizer
-        processor = load_tokenizer(local_dir)
+    except (ImportError, TypeError, AttributeError):
+        pass
 
+    from mlx_vlm.utils import load_tokenizer
+    processor = load_tokenizer(local_dir)
     if not hasattr(processor, "stopping_criteria"):
         eos = getattr(model.config, "eos_token_id", None)
         eos_set = set(eos) if isinstance(eos, list) else {eos} if eos is not None else set()
         processor.stopping_criteria = lambda token: int(token) in eos_set
-
     return processor
 
 
-# ---------------------------------------------------------------------------
-# Shared helpers
-# ---------------------------------------------------------------------------
-
-def _get_module(root, path):
+def _get_module(root, path: str):
     node = root
     for part in path.split("."):
         node = node[int(part)] if isinstance(node, (list, tuple)) else getattr(node, part)
     return node
 
 
-def _set_module(root, path, value):
+def _set_module(root, path: str, value):
     parts = path.split(".")
     parent = _get_module(root, ".".join(parts[:-1])) if len(parts) > 1 else root
     if isinstance(parent, list):
@@ -131,7 +121,8 @@ def _set_module(root, path, value):
         setattr(parent, parts[-1], value)
 
 
-def _patch_rotation_layers(model, weights, bits, group_size):
+def _patch_rotation_layers(model, weights: dict, bits: int, group_size: int):
+    """Replace quantized linear layers that have rotation params with RotateQuantizedLinear."""
     for prefix in sorted(k.removesuffix(".theta") for k in weights if k.endswith(".theta")):
         original = _get_module(model, prefix)
         _set_module(
@@ -147,12 +138,9 @@ def _patch_rotation_layers(model, weights, bits, group_size):
 
 
 def _is_io_layer(path, module):
+    """Predicate for mlx_nn.quantize: only quantize embed_tokens/lm_head natively."""
     return hasattr(module, "to_quantized") and (path.endswith("embed_tokens") or path.endswith("lm_head"))
 
-
-# ---------------------------------------------------------------------------
-# Public API
-# ---------------------------------------------------------------------------
 
 def load(model_path: str, lazy: bool = False) -> tuple:
     """Load a ParoQuant model for MLX. Returns (model, processor, is_vlm)."""
@@ -173,10 +161,8 @@ def load(model_path: str, lazy: bool = False) -> tuple:
     bits = int(paro.get("bits", 4))
     is_vlm = "vision_config" in config
 
-    # 1. Create model
     model = _create_model(config, is_vlm)
 
-    # 2. Load + convert weights
     weights = {}
     for sf in sorted(local_dir.glob("*.safetensors")):
         weights.update(mx.load(str(sf)))
@@ -185,7 +171,6 @@ def load(model_path: str, lazy: bool = False) -> tuple:
     if hasattr(model, "sanitize"):
         weights = model.sanitize(weights)
 
-    # 3. Patch rotation layers + load weights
     _patch_rotation_layers(model, weights, bits, group_size)
     model.load_weights(list(weights.items()), strict=False)
     mlx_nn.quantize(model, group_size, bits, mode="affine", class_predicate=_is_io_layer)
@@ -194,7 +179,7 @@ def load(model_path: str, lazy: bool = False) -> tuple:
         mx.eval(model.parameters())
     model.eval()
 
-    # 4. Load processor/tokenizer
     processor = _load_processor(local_dir, model, is_vlm)
+    logger.info("Loaded %s model from %s (VLM=%s).", config.get("model_type", "unknown"), model_path, is_vlm)
 
     return model, processor, is_vlm

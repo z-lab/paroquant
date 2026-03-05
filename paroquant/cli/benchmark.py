@@ -25,7 +25,7 @@ async def bench(gen, prompt: str, max_tokens: int, warmup: int, runs: int):
         result = await gen.generate(messages, params)
         elapsed = time.perf_counter() - start
         times.append(elapsed)
-        tokens.append(result.stats.token_count)
+        tokens.append(result.stats.num_tokens)
 
     avg_tokens = sum(tokens) / len(tokens)
     avg_time = sum(times) / len(times)

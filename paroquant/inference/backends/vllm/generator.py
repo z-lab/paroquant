@@ -9,27 +9,21 @@ from dataclasses import asdict
 from transformers import AutoTokenizer
 from vllm import AsyncEngineArgs, AsyncLLMEngine, SamplingParams
 
-import paroquant.inference.backends.vllm.plugin  # noqa: F401 — registers "paroquant" quantization
-from paroquant.inference.base import BaseGenerator, GenerationParams, GenerationResult, GenerationStats, build_prompt
+import paroquant.inference.backends.vllm.plugin  # noqa: F401 — registers quantization config
+from paroquant.inference.base import (
+    BaseGenerator,
+    GenerationParams,
+    GenerationResult,
+    GenerationStats,
+    build_prompt,
+)
 
 
 class VllmGenerator(BaseGenerator):
-    def __init__(
-        self,
-        model: str,
-        gpu_memory_utilization: float = 0.8,
-        trust_remote_code: bool = True,
-        enable_thinking: bool = False,
-        max_model_len: int | None = None,
-    ):
+    def __init__(self, model: str, enable_thinking: bool = False, **engine_kwargs):
         self.enable_thinking = enable_thinking
-        self.engine = AsyncLLMEngine.from_engine_args(AsyncEngineArgs(
-            model=model,
-            trust_remote_code=trust_remote_code,
-            gpu_memory_utilization=gpu_memory_utilization,
-            max_model_len=max_model_len,
-        ))
-        self.tokenizer = AutoTokenizer.from_pretrained(model, trust_remote_code=trust_remote_code)
+        self.engine = AsyncLLMEngine.from_engine_args(AsyncEngineArgs(model=model, **engine_kwargs))
+        self.tokenizer = AutoTokenizer.from_pretrained(model)
 
     async def generate(
         self,
@@ -42,18 +36,18 @@ class VllmGenerator(BaseGenerator):
 
         start = time.perf_counter()
         first_token_time = None
-        token_count = 0
+        num_tokens = 0
         last_text = ""
 
         async for output in self.engine.generate(prompt, sampling, f"req-{time.monotonic_ns()}"):
             text = output.outputs[0].text
-            delta = text[len(last_text):]
+            delta = text[len(last_text) :]
             if delta:
                 if first_token_time is None:
                     first_token_time = time.perf_counter()
                 if on_text:
                     on_text(delta)
-            token_count = len(output.outputs[0].token_ids)
+            num_tokens = len(output.outputs[0].token_ids)
             last_text = text
 
         end = time.perf_counter()
@@ -64,10 +58,10 @@ class VllmGenerator(BaseGenerator):
             prompt=prompt,
             output_text=last_text,
             stats=GenerationStats(
-                token_count=token_count,
-                total_time_s=end - start,
-                ttft_s=(first_token_time - start) if first_token_time else None,
-                tokens_per_second=token_count / gen_time if gen_time > 0 else 0.0,
+                num_tokens=num_tokens,
+                latency=end - start,
+                ttft=(first_token_time - start) if first_token_time else None,
+                tps=num_tokens / gen_time if gen_time > 0 else 0.0,
             ),
         )
 

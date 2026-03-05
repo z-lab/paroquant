@@ -1,63 +1,61 @@
-"""ParoQuant modules for PyTorch: Rotation and RotateQuantizedLinear."""
+"""RotateQuantizedLinear — pairwise rotation + INT4 AWQ GEMM for PyTorch."""
 
 from __future__ import annotations
 
 import torch
 import torch.nn as nn
 
-# AutoAWQ is deprecated but its GEMM kernel still works.
-# Patch the missing symbol that was removed in transformers >=4.55.
+# AutoAWQ's GEMM kernel imports PytorchGELUTanh from transformers.activations,
+# but it was removed in transformers >=4.55. Provide a stub until AutoAWQ is updated.
 import transformers.activations as _act
 if not hasattr(_act, "PytorchGELUTanh"):
     _act.PytorchGELUTanh = _act.GELUActivation
 
-from awq.modules.linear.gemm import WQLinear_GEMM as _AWQLinear
-
-
-class Rotation(nn.Module):
-    """Pairwise Givens rotation via the CUDA rotation kernel."""
-
-    def __init__(self, dim: int, krot: int = 8, group_size: int = 128,
-                 rotation_angles: torch.Tensor | None = None,
-                 rotation_pairs: torch.Tensor | None = None,
-                 channel_scales: torch.Tensor | None = None,
-                 device: str = "cuda"):
-        super().__init__()
-        num_groups = dim // group_size
-
-        if rotation_angles is None:
-            rotation_angles = torch.zeros(krot, dim // 2, device=device, dtype=torch.float16)
-        if rotation_pairs is None:
-            single = torch.randperm(group_size, dtype=torch.int, device=device)
-            rotation_pairs = single.repeat(num_groups).unsqueeze(0).expand(krot, -1)
-        if channel_scales is None:
-            channel_scales = torch.ones(1, dim, dtype=torch.half, device=device)
-
-        self.register_buffer("theta", rotation_angles.clone().contiguous())
-        self.register_buffer("pairs", rotation_pairs.clone().short().contiguous())
-        self.register_buffer("channel_scales", channel_scales.clone().contiguous())
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return torch.ops.rotation.rotate(x, self.pairs, self.theta, self.channel_scales)
+from awq.modules.linear.gemm import WQLinearMMFunction
 
 
 class RotateQuantizedLinear(nn.Module):
-    """Pairwise Givens rotation + quantized matmul (AWQ GEMM kernel)."""
+    """Pairwise Givens rotation + INT4 quantized matmul (AWQ GEMM kernel).
+
+    All parameters are stored flat (no submodules), so state dict keys like
+    ``gate_proj.theta`` and ``gate_proj.qweight`` match checkpoint naming directly.
+    This enables native HuggingFace weight loading via ``from_pretrained``.
+    """
 
     def __init__(self, in_features: int, out_features: int, bias: bool = False,
-                 group_size: int = 128, bits: int = 4,
-                 rotation_angles: torch.Tensor | None = None,
-                 rotation_pairs: torch.Tensor | None = None,
-                 channel_scales: torch.Tensor | None = None,
-                 device: str = "cuda"):
+                 group_size: int = 128, bits: int = 4, krot: int = 8):
         super().__init__()
-        self.rotation = Rotation(
-            in_features, rotation_angles=rotation_angles,
-            rotation_pairs=rotation_pairs, channel_scales=channel_scales,
-            device=device,
-        )
-        self.qlinear = _AWQLinear(bits, group_size, in_features, out_features, bias, dev=device)
+        self.in_features = in_features
+        self.out_features = out_features
+        self.w_bit = bits
+        self.group_size = group_size
+
+        pack = 32 // bits
+        n_groups = in_features // group_size
+
+        # Rotation buffers
+        self.register_buffer("theta", torch.zeros(krot, in_features // 2, dtype=torch.float16))
+        self.register_buffer("pairs", torch.zeros(krot, in_features, dtype=torch.int16))
+        self.register_buffer("channel_scales", torch.ones(1, in_features, dtype=torch.float16))
+
+        # AWQ quantized weight buffers
+        self.register_buffer("qweight", torch.zeros(in_features, out_features // pack, dtype=torch.int32))
+        self.register_buffer("qzeros", torch.zeros(n_groups, out_features // pack, dtype=torch.int32))
+        self.register_buffer("scales", torch.zeros(n_groups, out_features, dtype=torch.float16))
+
+        if bias:
+            self.register_buffer("bias", torch.zeros(out_features, dtype=torch.float16))
+        else:
+            self.bias = None
 
     @torch.no_grad()
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return self.qlinear(self.rotation(x))
+        out_shape = x.shape[:-1] + (self.out_features,)
+        if x.dtype != torch.float16:
+            x = x.half()
+        x = torch.ops.rotation.rotate(x, self.pairs, self.theta, self.channel_scales)
+        out = WQLinearMMFunction.apply(
+            x, self.qweight, self.qzeros, self.scales,
+            self.w_bit, self.group_size, self.bias, self.out_features,
+        )
+        return out.reshape(out_shape)

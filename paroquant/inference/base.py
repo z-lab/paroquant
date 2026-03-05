@@ -19,10 +19,10 @@ class GenerationParams:
 
 @dataclass
 class GenerationStats:
-    token_count: int
-    total_time_s: float
-    ttft_s: float | None
-    tokens_per_second: float
+    num_tokens: int
+    latency: float
+    ttft: float | None
+    tps: float
 
 
 @dataclass
