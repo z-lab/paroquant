@@ -42,6 +42,6 @@ ENV TORCH_CUDA_ARCH_LIST="8.0 8.6 8.7 8.9 9.0 10.0 12.0"
 
 COPY . .
 
-RUN pip install -e ".[optim,eval]" --no-cache-dir --no-build-isolation
+RUN pip install -e ".[optim,eval]" --no-cache-dir
 
 CMD ["/bin/bash"]

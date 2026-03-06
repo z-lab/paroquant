@@ -9,12 +9,10 @@ from dataclasses import dataclass
 
 @dataclass
 class GenerationParams:
-    """Sampling parameters (follows vLLM SamplingParams convention)."""
-
     max_tokens: int = 512
-    temperature: float = 0.6
+    temperature: float = 1.0
     top_p: float = 1.0
-    top_k: int = 32
+    top_k: int = -1
     repetition_penalty: float = 1.0
 
 
@@ -38,7 +36,7 @@ class BaseGenerator(ABC):
     backend: str = "unknown"
 
     @abstractmethod
-    async def _stream(
+    async def stream_generate(
         self,
         prompt: str,
         params: GenerationParams,
@@ -56,7 +54,7 @@ class BaseGenerator(ABC):
         first_token_time = None
         chunks: list[str] = []
 
-        async for text in self._stream(prompt, params):
+        async for text in self.stream_generate(prompt, params):
             if first_token_time is None:
                 first_token_time = time.perf_counter()
             chunks.append(text)
@@ -113,7 +111,7 @@ _BACKENDS = {
 }
 
 
-def _detect_backend() -> str:
+def detect_backend() -> str:
     import platform
 
     if platform.processor() == "arm" or platform.machine() == "arm64":
@@ -142,7 +140,7 @@ def create_generator(backend: str, model: str, **kwargs) -> BaseGenerator:
     """Factory that instantiates the right backend by name."""
     key = backend.lower()
     if key == "auto":
-        key = _detect_backend()
+        key = detect_backend()
 
     if key not in _BACKENDS:
         raise ValueError(f"Unknown backend: {backend!r}. Choose from: {', '.join(_BACKENDS)}")

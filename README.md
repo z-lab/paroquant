@@ -65,10 +65,10 @@ Want a model that's not listed? [Open an issue](https://github.com/z-lab/paroqua
 ```bash
 git clone https://github.com/z-lab/paroquant && cd paroquant
 
-pip install -e ".[vllm]" --no-build-isolation           # vLLM backend (GPU, recommended)
-pip install -e ".[transformers]" --no-build-isolation    # Transformers backend (GPU)
-pip install -e ".[mlx]"                                  # MLX backend (Apple Silicon)
-pip install -e ".[optim,eval]" --no-build-isolation      # Optimization & evaluation
+pip install -e ".[vllm]"            # vLLM backend (GPU, recommended)
+pip install -e ".[transformers]"    # Transformers backend (GPU)
+pip install -e ".[mlx]"             # MLX backend (Apple Silicon)
+pip install -e ".[optim,eval]"      # Optimization & evaluation
 ```
 
 Or use Docker: `docker run -it --gpus all --ipc=host ghcr.io/z-lab/paroquant:latest`

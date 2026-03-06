@@ -38,7 +38,7 @@ class TransformersGenerator(BaseGenerator):
         self.model.eval()
         self.tokenizer = AutoTokenizer.from_pretrained(model)
 
-    async def _stream(self, prompt: str, params: GenerationParams) -> AsyncIterator[str]:
+    async def stream_generate(self, prompt: str, params: GenerationParams) -> AsyncIterator[str]:
         inputs = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)
 
         streamer = TextIteratorStreamer(

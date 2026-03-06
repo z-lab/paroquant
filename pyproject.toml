@@ -3,10 +3,22 @@ name = "paroquant"
 version = "0.1.0"
 requires-python = ">=3.11"
 description = "ParoQuant — Pairwise Rotation Quantization for LLMs"
+readme = "README.md"
 license = { text = "MIT" }
+authors = [{ name = "Z Lab" }]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 dependencies = [
     "rich",
 ]
+
+[project.urls]
+Homepage = "https://paroquant.z-lab.ai"
+Paper = "https://arxiv.org/abs/2511.10645"
+Models = "https://huggingface.co/collections/z-lab/paroquant"
 
 [project.optional-dependencies]
 transformers = [
@@ -50,6 +62,10 @@ build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
 include = ["paroquant*"]
+
+[tool.setuptools.package-data]
+"paroquant.kernels.cuda" = ["*.cu", "*.cpp", "*.cuh"]
+"paroquant.kernels.metal" = ["*.metal"]
 
 [tool.black]
 line-length = 120

@@ -29,7 +29,7 @@ async def bench(gen, prompt: str, max_tokens: int, warmup: int, runs: int):
 async def main():
     parser = argparse.ArgumentParser(description="Benchmark generation throughput")
     parser.add_argument("--model", type=str, required=True)
-    parser.add_argument("--backend", type=str, default="mlx", choices=["mlx", "vllm", "transformers"])
+    parser.add_argument("--backend", type=str, default="auto", choices=["auto", "mlx", "vllm", "transformers"])
     parser.add_argument("--max-tokens", type=int, default=128)
     parser.add_argument("--warmup", type=int, default=2)
     parser.add_argument("--runs", type=int, default=5)

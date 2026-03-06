@@ -16,7 +16,7 @@ from rich.panel import Panel
 from rich.spinner import Spinner
 from rich.theme import Theme
 
-from paroquant.inference import GenerationParams, build_prompt, create_generator
+from paroquant.inference import GenerationParams, build_prompt, create_generator, detect_backend
 
 
 @dataclass
@@ -162,9 +162,7 @@ async def run_chat_app(config: ChatAppConfig):
 
     console = Console(theme=Theme({"hint": "dim"}))
 
-    from paroquant.inference.base import _detect_backend
-
-    backend = _detect_backend() if config.backend == "auto" else config.backend
+    backend = detect_backend() if config.backend == "auto" else config.backend
 
     kwargs = {}
     if backend == "vllm":
