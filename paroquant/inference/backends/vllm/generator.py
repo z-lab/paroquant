@@ -4,6 +4,7 @@ import itertools
 from collections.abc import AsyncIterator
 from dataclasses import asdict
 
+import torch.distributed as dist
 from transformers import AutoTokenizer
 from vllm import AsyncEngineArgs, AsyncLLMEngine, SamplingParams
 
@@ -34,3 +35,6 @@ class VllmGenerator(BaseGenerator):
         shutdown = getattr(self.engine, "shutdown", None) or getattr(self.engine, "shutdown_background_loop", None)
         if shutdown:
             shutdown()
+
+        if dist.is_initialized():
+            dist.destroy_process_group()
