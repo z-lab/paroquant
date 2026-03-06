@@ -114,7 +114,7 @@ _BACKENDS = {
 def detect_backend() -> str:
     import platform
 
-    if platform.processor() == "arm" or platform.machine() == "arm64":
+    if platform.system() == "Darwin":
         try:
             import mlx.core  # noqa: F401
 
