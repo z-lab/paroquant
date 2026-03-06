@@ -23,7 +23,6 @@ Models = "https://huggingface.co/collections/z-lab/paroquant"
 [project.optional-dependencies]
 transformers = [
     "torch>=2.8",
-    "torchvision",
     "transformers>=4.55",
     "autoawq",
 ]
@@ -34,12 +33,6 @@ mlx = [
     "mlx",
     "mlx-lm",
     "mlx-vlm",
-    "numpy",
-    "transformers",
-    "safetensors",
-    "huggingface-hub",
-    "sentencepiece",
-    "protobuf",
 ]
 optim = [
     "paroquant[transformers]",
