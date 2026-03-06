@@ -50,7 +50,6 @@ All models are available on [Hugging Face](https://huggingface.co/collections/z-
 | Qwen3-4B | [`z-lab/Qwen3-4B-PARO`](https://huggingface.co/z-lab/Qwen3-4B-PARO) |
 | Qwen3-8B | [`z-lab/Qwen3-8B-PARO`](https://huggingface.co/z-lab/Qwen3-8B-PARO) |
 | Qwen3-14B | [`z-lab/Qwen3-14B-PARO`](https://huggingface.co/z-lab/Qwen3-14B-PARO) |
-| Qwen3-4B-Thinking-2507 | [`z-lab/Qwen3-4B-Thinking-2507-PARO`](https://huggingface.co/z-lab/Qwen3-4B-Thinking-2507-PARO) |
 
 **Qwen3.5**
 
@@ -67,10 +66,15 @@ All models are available on [Hugging Face](https://huggingface.co/collections/z-
 |---|---|
 | Llama-2-7B | [`z-lab/Llama-2-7b-hf-PARO`](https://huggingface.co/z-lab/Llama-2-7b-hf-PARO) |
 | Llama-3-8B | [`z-lab/Meta-Llama-3-8B-PARO`](https://huggingface.co/z-lab/Meta-Llama-3-8B-PARO) |
-| Llama-3-70B | [`z-lab/Meta-Llama-3-70B-PARO`](https://huggingface.co/z-lab/Meta-Llama-3-70B-PARO) |
 | Llama-3.1-8B-Instruct | [`z-lab/Llama-3.1-8B-Instruct-PARO`](https://huggingface.co/z-lab/Llama-3.1-8B-Instruct-PARO) |
 
 Want a model that's not listed? [Open an issue](https://github.com/z-lab/paroquant/issues/new) and let us know.
+
+## Reproduction
+
+> [!NOTE]
+> The main branch of this repository is under active development, and reproducibility is not guaranteed.
+> Please use the [`legacy`](https://github.com/z-lab/paroquant/tree/legacy) branch to reproduce results from the paper.
 
 ## Installation
 
@@ -97,10 +101,6 @@ python -m paroquant.cli.convert \
   --result-dir output/Qwen3-8B \
   --output-path models/Qwen3-8B-PARO
 ```
-
-## Reproduction
-
-See [`experiments/README.md`](./experiments/README.md) for scripts to reproduce all results in the paper.
 
 ## Docker Images
 
