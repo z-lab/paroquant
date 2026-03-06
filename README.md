@@ -22,7 +22,7 @@ State-of-the-art INT4 quantization for LLMs. ParoQuant uses learned pairwise rot
 **NVIDIA GPU:**
 
 ```bash
-pip install paroquant[vllm]
+pip install "paroquant[vllm]"
 python -m paroquant.cli.chat --model z-lab/Qwen3-8B-PARO
 
 # or with Docker
@@ -33,7 +33,7 @@ docker run --pull=always --rm -it --gpus all --ipc=host \
 **Apple Silicon:**
 
 ```bash
-pip install paroquant[mlx]
+pip install "paroquant[mlx]"
 python -m paroquant.cli.chat --model z-lab/Qwen3-8B-PARO
 ```
 
