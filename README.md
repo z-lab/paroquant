@@ -4,12 +4,10 @@
 [Blog](https://paroquant.z-lab.ai) |
 [Models](https://huggingface.co/collections/z-lab/paroquant)
 
-ParoQuant is an efficient 4-bit weight-only quantization method that achieves state-of-the-art quantization accuracy while incurring minimal overhead during inference. It currently supports LLaMA and Qwen3 model family.
-
-<img style="width:100%" src="assets/method.svg" alt="ParoQuant Method Diagram">
-
-> [!WARNING] Reproduction
+> [!NOTE]
 > The [`main`](https://github.com/z-lab/paroquant) branch of this repository is under active development and may break reproducibility. This branch `legacy` is specifically maintained for reproducing the results in the paper.
+
+ParoQuant is an efficient 4-bit weight-only quantization method that achieves state-of-the-art quantization accuracy while incurring minimal overhead during inference. It currently supports LLaMA and Qwen3 model family.
 
 ## Setup
 
