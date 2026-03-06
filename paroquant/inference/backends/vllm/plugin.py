@@ -4,25 +4,16 @@ from typing import TYPE_CHECKING, Any
 
 import torch
 from torch.nn import Parameter
-from vllm import _custom_ops as ops
 from vllm.logger import init_logger
-from vllm.model_executor.layers.linear import (
-    LinearBase,
-    LinearMethodBase,
-    UnquantizedLinearMethod,
-)
+from vllm.model_executor.layers.linear import LinearBase, LinearMethodBase, UnquantizedLinearMethod
 from vllm.model_executor.layers.quantization import register_quantization_config
+from vllm.model_executor.layers.quantization.awq_marlin import AWQMarlinLinearMethod
 from vllm.model_executor.layers.quantization.base_config import QuantizationConfig
 from vllm.model_executor.layers.quantization.utils.marlin_utils import (
     apply_awq_marlin_linear,
-    awq_to_marlin_zero_points,
     check_marlin_supports_layer,
-    marlin_make_empty_g_idx,
-    marlin_make_workspace_new,
-    marlin_permute_scales,
 )
 from vllm.model_executor.layers.quantization.utils.quant_utils import is_layer_skipped
-from vllm.model_executor.parameter import GroupQuantScaleParameter, PackedvLLMParameter
 from vllm.scalar_type import scalar_types
 from vllm.transformers_utils.config import get_safetensors_params_metadata
 
@@ -136,11 +127,11 @@ class ParoQuantConfig(QuantizationConfig):
         return ParoQuantLinearMethod(self)
 
 
-class ParoQuantLinearMethod(LinearMethodBase):
+class ParoQuantLinearMethod(AWQMarlinLinearMethod):
     """Per-projection rotation followed by AWQ-Marlin INT4 matmul."""
 
     def __init__(self, quant_config: ParoQuantConfig) -> None:
-        self.quant_config = quant_config
+        super().__init__(quant_config)
 
     def create_weights(
         self,
@@ -152,46 +143,17 @@ class ParoQuantLinearMethod(LinearMethodBase):
         params_dtype: torch.dtype,
         **extra_weight_attrs,
     ) -> None:
-        del output_size
-        output_size_per_partition = sum(output_partition_sizes)
-        pack = self.quant_config.pack_factor
-        group_size = self.quant_config.group_size
-        weight_loader = extra_weight_attrs.get("weight_loader")
+        super().create_weights(
+            layer,
+            input_size_per_partition,
+            output_partition_sizes,
+            input_size,
+            output_size,
+            params_dtype,
+            **extra_weight_attrs,
+        )
+
         n_parts = len(output_partition_sizes)
-        n_groups = input_size_per_partition // group_size
-
-        layer.register_parameter(
-            "qweight",
-            PackedvLLMParameter(
-                data=torch.empty(input_size_per_partition, output_size_per_partition // pack, dtype=torch.int32),
-                input_dim=0,
-                output_dim=1,
-                packed_dim=1,
-                packed_factor=pack,
-                weight_loader=weight_loader,
-            ),
-        )
-        layer.register_parameter(
-            "qzeros",
-            PackedvLLMParameter(
-                data=torch.empty(n_groups, output_size_per_partition // pack, dtype=torch.int32),
-                input_dim=0,
-                output_dim=1,
-                packed_dim=1,
-                packed_factor=pack,
-                weight_loader=weight_loader,
-            ),
-        )
-        layer.register_parameter(
-            "scales",
-            GroupQuantScaleParameter(
-                data=torch.empty(n_groups, output_size_per_partition, dtype=params_dtype),
-                input_dim=0,
-                output_dim=1,
-                weight_loader=weight_loader,
-            ),
-        )
-
         krot = self.quant_config.krot
         for name, shape, dtype in [
             ("theta", (n_parts, krot, input_size_per_partition // 2), torch.float16),
@@ -203,53 +165,59 @@ class ParoQuantLinearMethod(LinearMethodBase):
             p.weight_loader = _rotation_weight_loader
             layer.register_parameter(name, p)
 
-        layer.input_size_per_partition = input_size_per_partition
-        layer.output_size_per_partition = output_size_per_partition
-        layer.num_groups = n_groups
         layer.num_partitions = n_parts
         layer.output_partition_sizes = output_partition_sizes
 
-    def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
-        device = layer.qweight.device
-        bits = self.quant_config.bits
-        gs = self.quant_config.group_size
-        pack = self.quant_config.pack_factor
-        n = layer.num_partitions
-        sizes = layer.output_partition_sizes
-        k = layer.input_size_per_partition
+    def _convert_partition(self, qw, sc, qz, k, out_n, num_groups):
+        """AWQ→Marlin conversion for a single partition via the parent method."""
+        proxy = torch.nn.Module()
+        proxy.register_parameter("qweight", Parameter(qw.contiguous(), requires_grad=False))
+        proxy.register_parameter("scales", Parameter(sc.contiguous(), requires_grad=False))
+        proxy.register_parameter("qzeros", Parameter(qz.contiguous(), requires_grad=False))
+        proxy.input_size_per_partition = k
+        proxy.output_size_per_partition = out_n
+        proxy.num_groups = num_groups
+        super().process_weights_after_loading(proxy)
+        return proxy
 
-        if n > 1:
+    def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
+        n = layer.num_partitions
+
+        if n == 1:
+            super().process_weights_after_loading(layer)
+        else:
+            pack = self.quant_config.pack_factor
+            sizes = layer.output_partition_sizes
+            k = layer.input_size_per_partition
+
             qw = layer.qweight.data.split([s // pack for s in sizes], dim=1)
             sc = layer.scales.data.split(sizes, dim=1)
             qz = layer.qzeros.data.split([s // pack for s in sizes], dim=1)
-        else:
-            qw, sc, qz = [layer.qweight.data], [layer.scales.data], [layer.qzeros.data]
 
-        marlin_qw, marlin_sc, marlin_zp = [], [], []
-        for i in range(n):
-            out_n = sizes[i]
-            marlin_qw.append(ops.awq_marlin_repack(qw[i].contiguous(), size_k=k, size_n=out_n, num_bits=bits))
-            marlin_sc.append(marlin_permute_scales(sc[i].contiguous(), size_k=k, size_n=out_n, group_size=gs))
-            marlin_zp.append(
-                awq_to_marlin_zero_points(qz[i].contiguous(), size_k=layer.num_groups, size_n=out_n, num_bits=bits)
-            )
+            proxies = [self._convert_partition(qw[i], sc[i], qz[i], k, sizes[i], layer.num_groups) for i in range(n)]
 
-        del layer.qweight, layer.scales, layer.qzeros
-        layer.marlin_qweight = marlin_qw
-        layer.marlin_scales = marlin_sc
-        layer.marlin_qzeros = marlin_zp
-        layer.workspace = marlin_make_workspace_new(device)
-        layer.g_idx = marlin_make_empty_g_idx(device)
-        layer.g_idx_sort_indices = marlin_make_empty_g_idx(device)
+            del layer.qweight, layer.scales, layer.qzeros
+            layer.marlin_qweight = [p.qweight for p in proxies]
+            layer.marlin_scales = [p.scales for p in proxies]
+            layer.marlin_qzeros = [p.qzeros for p in proxies]
+            layer.workspace = proxies[0].workspace
+            layer.g_idx = proxies[0].g_idx
+            layer.g_idx_sort_indices = proxies[0].g_idx_sort_indices
 
-        layer.rot_theta = layer.theta.data.to(device)
-        layer.rot_pairs = layer.pairs.data.to(device)
-        layer.rot_scales = layer.channel_scales.data.to(device)
+        layer.rot_theta = layer.theta.data
+        layer.rot_pairs = layer.pairs.data
+        layer.rot_scales = layer.channel_scales.data
         del layer.theta, layer.pairs, layer.channel_scales
 
     def apply(self, layer: torch.nn.Module, x: torch.Tensor, bias: torch.Tensor | None = None) -> torch.Tensor:
+        n = layer.num_partitions
+
+        if n == 1:
+            x = torch.ops.rotation.rotate(x, layer.rot_pairs[0], layer.rot_theta[0], layer.rot_scales[0])
+            return super().apply(layer, x, bias)
+
         outputs = []
-        for i in range(layer.num_partitions):
+        for i in range(n):
             x_rot = torch.ops.rotation.rotate(x, layer.rot_pairs[i], layer.rot_theta[i], layer.rot_scales[i])
             outputs.append(
                 apply_awq_marlin_linear(
@@ -263,11 +231,11 @@ class ParoQuantLinearMethod(LinearMethodBase):
                     quant_type=self.quant_config.quant_type,
                     output_size_per_partition=layer.output_partition_sizes[i],
                     input_size_per_partition=layer.input_size_per_partition,
-                    bias=bias if layer.num_partitions == 1 else None,
+                    bias=None,
                 )
             )
 
-        result = outputs[0] if len(outputs) == 1 else torch.cat(outputs, dim=-1)
-        if bias is not None and layer.num_partitions > 1:
+        result = torch.cat(outputs, dim=-1)
+        if bias is not None:
             result = result + bias
         return result

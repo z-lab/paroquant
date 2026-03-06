@@ -56,11 +56,9 @@ class RotateQuantizedLinear(nn.Module):
 
     @torch.no_grad()
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        out_shape = x.shape[:-1] + (self.out_features,)
-        if x.dtype != torch.float16:
-            x = x.half()
+        assert x.dtype == torch.float16, f"Expected float16 input, got {x.dtype}"
         x = torch.ops.rotation.rotate(x, self.pairs, self.theta, self.channel_scales)
-        out = WQLinearMMFunction.apply(
+        y = WQLinearMMFunction.apply(
             x,
             self.qweight,
             self.qzeros,
@@ -70,4 +68,4 @@ class RotateQuantizedLinear(nn.Module):
             self.bias,
             self.out_features,
         )
-        return out.reshape(out_shape)
+        return y.reshape(*x.shape[:-1], self.out_features)
