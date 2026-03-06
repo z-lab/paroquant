@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import importlib
+import time
 from abc import ABC, abstractmethod
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 
 
@@ -14,6 +15,7 @@ class GenerationParams:
     temperature: float = 0.6
     top_p: float = 1.0
     top_k: int = 32
+    repetition_penalty: float = 1.0
 
 
 @dataclass
@@ -33,14 +35,53 @@ class GenerationResult:
 
 
 class BaseGenerator(ABC):
+    backend: str = "unknown"
+
     @abstractmethod
+    async def _stream(
+        self,
+        prompt: str,
+        params: GenerationParams,
+    ) -> AsyncIterator[str]:
+        """Yield text chunks one at a time."""
+        ...
+
     async def generate(
         self,
-        messages: list[dict[str, str]],
+        prompt: str,
         params: GenerationParams,
         on_text: Callable[[str], None] | None = None,
     ) -> GenerationResult:
-        ...
+        start = time.perf_counter()
+        first_token_time = None
+        chunks: list[str] = []
+
+        async for text in self._stream(prompt, params):
+            if first_token_time is None:
+                first_token_time = time.perf_counter()
+            chunks.append(text)
+            if on_text:
+                on_text(text)
+
+        end = time.perf_counter()
+        output_text = "".join(chunks)
+        gen_time = end - (first_token_time or start)
+        num_tokens = self._count_tokens(output_text)
+
+        return GenerationResult(
+            backend=self.backend,
+            prompt=prompt,
+            output_text=output_text,
+            stats=GenerationStats(
+                num_tokens=num_tokens,
+                latency=end - start,
+                ttft=(first_token_time - start) if first_token_time else None,
+                tps=num_tokens / gen_time if gen_time > 0 else 0.0,
+            ),
+        )
+
+    def _count_tokens(self, text: str) -> int:
+        return len(self.tokenizer.encode(text, add_special_tokens=False))
 
     async def close(self) -> None:
         pass

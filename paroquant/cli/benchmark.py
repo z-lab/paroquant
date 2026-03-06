@@ -2,20 +2,20 @@ import argparse
 import asyncio
 import time
 
-from paroquant.inference import create_generator, GenerationParams
+from paroquant.inference import GenerationParams, build_prompt, create_generator
 
 
 async def bench(gen, prompt: str, max_tokens: int, warmup: int, runs: int):
     params = GenerationParams(max_tokens=max_tokens, temperature=0.0)
-    messages = [{"role": "user", "content": prompt}]
+    formatted = build_prompt(gen.tokenizer, [{"role": "user", "content": prompt}])
 
     for _ in range(warmup):
-        await gen.generate(messages, params)
+        await gen.generate(formatted, params)
 
     times, tokens = [], []
     for _ in range(runs):
         start = time.perf_counter()
-        result = await gen.generate(messages, params)
+        result = await gen.generate(formatted, params)
         elapsed = time.perf_counter() - start
         times.append(elapsed)
         tokens.append(result.stats.num_tokens)
