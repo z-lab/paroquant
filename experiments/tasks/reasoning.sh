@@ -1,7 +1,4 @@
 #!/usr/bin/env bash
-ROOT_DIR="$(pwd)"
-export PYTHONPATH="${ROOT_DIR}:${PYTHONPATH}"
-
 set -e
 
 model_path=$1

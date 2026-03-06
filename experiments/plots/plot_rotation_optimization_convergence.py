@@ -16,8 +16,8 @@ sys.path.extend(
 )
 
 
-from paroquant.quantizer import UniformAffineQuantizer
-from paroquant.util import (
+from paroquant.optim.quantizer import UniformAffineQuantizer
+from paroquant.optim.util import (
     get_blocks,
     catch_first_layer_input,
     get_calib_dataset,
@@ -26,9 +26,9 @@ from paroquant.util import (
     empty_cache,
     get_named_linears,
 )
-from paroquant.optimize import get_random_rotation_pairs
-from paroquant.module import PseudoQuantizedLinear
-from paroquant.convert_utils import transform_to_kernel_data
+from paroquant.optim.train import get_random_rotation_pairs
+from paroquant.optim.qlinear import PseudoQuantizedLinear
+from paroquant.optim.rotation import transform_to_kernel_data
 
 try:
     from hadamard_utils import random_hadamard_matrix

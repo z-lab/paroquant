@@ -1,6 +1,6 @@
 # Reproduction Scripts
 
-These are the scripts to reproduce most results in the paper. The environment for all the experiments (except for baselines and reasoning tasks) is provided in [`environment.yml`](../environment.yml). The docker image for this environment is `ghcr.io/z-lab/paroquant:latest`.
+These are the scripts to reproduce most results in the paper. The environment for all the experiments (except for baselines and reasoning tasks) can be set up with `pip install -e ".[gpu]"` from the repo root (see [`pyproject.toml`](../pyproject.toml)). The docker image for this environment is `ghcr.io/z-lab/paroquant:latest`.
 
 We use pseudo-quantized models for all experiments, except for experiments on AWQ where we use [AutoAWQ](https://github.com/casper-hansen/AutoAWQ) to run real-quantized models. ParoQuant's pseudo-quantized models used in the experiments can be downloaded from the `pseudo` directory at [`z-lab/paroquant-checkpoints`](https://huggingface.co/z-lab/paroquant-checkpoints).
 
@@ -12,11 +12,11 @@ To quantize and optimize a model with ParoQuant:
 ./experiments/optimize/4bit.sh <model> [<num_shards>]
 ```
 
-`num_shards` is 1 by default and may need to be adjusted for large models to accommodate memory constraints. Run `python3 optimize.py --help` for more details.
+`num_shards` is 1 by default and may need to be adjusted for large models to accommodate memory constraints. Run `python3 -m paroquant.cli.optimize --help` for more details.
 
 We adjust the batch size, learning rate, and number of training samples for LLaMA-3-70B. Please use [`experiments/optimize/4bit_70b.sh`](./optimize/4bit_70b.sh) instead for LLaMA-3-70B.
 
-The optimized checkpoints will be saved to `./output/<model_name>`. To create a Hugging Face model with the checkpoints, use [`scripts/pseudo_quant.py`](../scripts/pseudo_quant.py) for pseudo quantization and [`scripts/real_quant.py`](../scripts/real_quant.py) for real quantization.
+The optimized checkpoints will be saved to `./output/<model_name>`. To create a Hugging Face model with the checkpoints, use [`paroquant/cli/convert.py`](../paroquant/cli/convert.py) (`--mode pseudo` for pseudo-quantized, `--mode real` for INT4).
 
 ## Baselines
 

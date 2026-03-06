@@ -1,8 +1,0 @@
-name: paroquant
-channels:
-  - defaults
-dependencies:
-  - python=3.11
-  - pip=25.2
-  - pip:
-      - -r ./requirements.txt

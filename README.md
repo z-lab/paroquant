@@ -1,159 +1,110 @@
-# ParoQuant: Pairwise Rotation Quantization for Efficient Reasoning LLM Inference
+# ParoQuant
 
-[Paper](https://arxiv.org/abs/2511.10645) |
-[Blog](https://paroquant.z-lab.ai) |
-[Models](https://huggingface.co/collections/z-lab/paroquant)
+**Pairwise Rotation Quantization for Efficient Reasoning LLM Inference**
 
-ParoQuant is an efficient 4-bit weight-only quantization method that achieves state-of-the-art quantization accuracy while incurring minimal overhead during inference. It currently supports LLaMA and Qwen3 model family.
+<p align="center">
+  <a href="https://arxiv.org/abs/2511.10645"><img src="https://img.shields.io/badge/arXiv-2511.10645-b31b1b.svg" alt="Paper"></a>
+  <a href="https://paroquant.z-lab.ai"><img src="https://img.shields.io/badge/Blog-ParoQuant-blue" alt="Blog"></a>
+  <a href="https://huggingface.co/collections/z-lab/paroquant"><img src="https://img.shields.io/badge/%F0%9F%A4%97-Models-yellow" alt="Models"></a>
+  <a href="https://pypi.org/project/paroquant/"><img src="https://img.shields.io/pypi/v/paroquant" alt="PyPI"></a>
+</p>
 
-<img style="width:100%" src="assets/method.svg" alt="ParoQuant Method Diagram">
+State-of-the-art INT4 quantization for LLMs. ParoQuant uses learned pairwise rotations to suppress weight outliers, closing the accuracy gap with FP16 while running at near-AWQ speed. Supports NVIDIA GPUs (vLLM, Transformers) and Apple Silicon (MLX).
+
+<p align="center">
+  <a href="https://youtu.be/fISG4CkizLM">
+    <img src="https://img.youtube.com/vi/fISG4CkizLM/maxresdefault.jpg" width="80%">
+  </a>
+</p>
 
 ## Quick Start
 
-Try out ParoQuant models with a single command:
+**NVIDIA GPU:**
 
 ```bash
+pip install "paroquant[vllm]"
+python -m paroquant.cli.chat --model z-lab/Qwen3-8B-PARO
+
+# or with Docker
 docker run --pull=always --rm -it --gpus all --ipc=host \
-  ghcr.io/z-lab/paroquant:chat \
-  --model z-lab/Qwen3-8B-PARO
+  ghcr.io/z-lab/paroquant:chat --model z-lab/Qwen3-8B-PARO
 ```
 
-For ARM64 platforms (e.g. NVIDIA DGX Spark), please use `ghcr.io/z-lab/paroquant:chat-cu130` instead.
-
-## Setup
-
-We recommend using the docker image `ghcr.io/z-lab/paroquant:latest` without manually setting up environment:
-
-```
-docker run -it --gpus all --ipc=host ghcr.io/z-lab/paroquant:latest
-```
-
-Please follow the setup instructions below if you'd prefer running on the host.
-
-Clone this repository:
+**Apple Silicon:**
 
 ```bash
-git clone https://github.com/z-lab/paroquant
-cd paroquant
-```
-
-Install dependencies:
-
-```bash
-# use conda (recommended)
-conda env create -f environment.yml
-conda activate paroquant
-pip install ./kernels --no-build-isolation
-
-# or use pip
-pip install -r requirements.txt
-pip install ./kernels --no-build-isolation
-```
-
-You may need to modify [`requirements.txt`](requirements.txt) to match your CUDA version.
-
-## Usage
-
-### Optimization
-
-First, run the optimization script to obtain the optimized checkpoints. The checkpoints will be stored in `output/<model_name>`.
-
-```bash
-experiments/optimize/4bit.sh Qwen/Qwen3-8B
-```
-
-Then, create a huggingface model with pseudo quantization (*i.e.,* model weights are in FP16 simulating the quantization) or real quantization (*i.e.*, model weights are in INT4):
-
-```bash
-# pseudo quantization
-python3 scripts/pseudo_quant.py \
-    --model Qwen/Qwen3-8B \
-    --result-dir output/Qwen3-8B \
-    --output-path models/Qwen3-8B-PARO-pseudo
-
-# real quantization
-python3 scripts/real_quant.py \
-    --model Qwen/Qwen3-8B \
-    --result-dir output/Qwen3-8B \
-    --output-path models/Qwen3-8B-PARO
-```
-
-### Inference
-
-The docker image for interactive inference is `ghcr.io/z-lab/paroquant:chat`. Install vLLM if you are running on the host:
-
-```bash
-pip install vllm==0.15.1
-```
-
-To run a real-quantized model with vLLM and open an interactive chat:
-
-```bash
-# with docker
-docker run --rm -it --gpus all --ipc=host ghcr.io/z-lab/paroquant:chat --model z-lab/Qwen3-8B-PARO
-
-# without docker
-python3 scripts/interactive_gen.py --model z-lab/Qwen3-8B-PARO
+pip install "paroquant[mlx]"
+python -m paroquant.cli.chat --model z-lab/Qwen3-8B-PARO
 ```
 
 ## Models
 
-We provide pre-quantized 4-bit ParoQuant models listed below. These are real-quantized models and can be loaded with the method described above.
+All models are available on [Hugging Face](https://huggingface.co/collections/z-lab/paroquant). Swap the model name in the commands above to try any of them.
 
-| Model                        | Hugging Face Path                                                                                           |
-| ---------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| Meta-Llama-3-8B              | [`z-lab/Meta-Llama-3-8B-PARO`](https://huggingface.co/z-lab/Meta-Llama-3-8B-PARO)                           |
-| Meta-Llama-3-70B             | [`z-lab/Meta-Llama-3-70B-PARO`](https://huggingface.co/z-lab/Meta-Llama-3-70B-PARO)                         |
-| Llama-3.1-8B-Instruct        | [`z-lab/Llama-3.1-8B-Instruct-PARO`](https://huggingface.co/z-lab/Llama-3.1-8B-Instruct-PARO)               |
-| Llama-2-7b-hf                | [`z-lab/Llama-2-7b-hf-PARO`](https://huggingface.co/z-lab/Llama-2-7b-hf-PARO)                               |
-| Qwen3-0.6B                   | [`z-lab/Qwen3-0.6B-PARO`](https://huggingface.co/z-lab/Qwen3-0.6B-PARO)                                     |
-| Qwen3-1.7B                   | [`z-lab/Qwen3-1.7B-PARO`](https://huggingface.co/z-lab/Qwen3-1.7B-PARO)                                     |
-| Qwen3-4B                     | [`z-lab/Qwen3-4B-PARO`](https://huggingface.co/z-lab/Qwen3-4B-PARO)                                         |
-| Qwen3-8B                     | [`z-lab/Qwen3-8B-PARO`](https://huggingface.co/z-lab/Qwen3-8B-PARO)                                         |
-| Qwen3-14B                    | [`z-lab/Qwen3-14B-PARO`](https://huggingface.co/z-lab/Qwen3-14B-PARO)                                       |
-| Qwen3-0.6B-Base              | [`z-lab/Qwen3-0.6B-Base-PARO`](https://huggingface.co/z-lab/Qwen3-0.6B-Base-PARO)                           |
-| Qwen3-1.7B-Base              | [`z-lab/Qwen3-1.7B-Base-PARO`](https://huggingface.co/z-lab/Qwen3-1.7B-Base-PARO)                           |
-| Qwen3-4B-Base                | [`z-lab/Qwen3-4B-Base-PARO`](https://huggingface.co/z-lab/Qwen3-4B-Base-PARO)                               |
-| Qwen3-8B-Base                | [`z-lab/Qwen3-8B-Base-PARO`](https://huggingface.co/z-lab/Qwen3-8B-Base-PARO)                               |
-| Qwen3-14B-Base               | [`z-lab/Qwen3-14B-Base-PARO`](https://huggingface.co/z-lab/Qwen3-14B-Base-PARO)                             |
-| Qwen3-4B-Thinking-2507       | [`z-lab/Qwen3-4B-Thinking-2507-PARO`](https://huggingface.co/z-lab/Qwen3-4B-Thinking-2507-PARO)             |
-| DeepSeek-R1-Distill-Llama-8B | [`z-lab/DeepSeek-R1-Distill-Llama-8B-PARO`](https://huggingface.co/z-lab/DeepSeek-R1-Distill-Llama-8B-PARO) |
+**Qwen3**
 
-In addition, we provide the original checkpoints and pseudo-quantized models in [`z-lab/paroquant-checkpoints`](https://huggingface.co/z-lab/paroquant-checkpoints) to facilitate reproduction and further research.
+| Model | Checkpoint |
+|---|---|
+| Qwen3-0.6B | [`z-lab/Qwen3-0.6B-PARO`](https://huggingface.co/z-lab/Qwen3-0.6B-PARO) |
+| Qwen3-1.7B | [`z-lab/Qwen3-1.7B-PARO`](https://huggingface.co/z-lab/Qwen3-1.7B-PARO) |
+| Qwen3-4B | [`z-lab/Qwen3-4B-PARO`](https://huggingface.co/z-lab/Qwen3-4B-PARO) |
+| Qwen3-8B | [`z-lab/Qwen3-8B-PARO`](https://huggingface.co/z-lab/Qwen3-8B-PARO) |
+| Qwen3-14B | [`z-lab/Qwen3-14B-PARO`](https://huggingface.co/z-lab/Qwen3-14B-PARO) |
+| Qwen3-4B-Thinking-2507 | [`z-lab/Qwen3-4B-Thinking-2507-PARO`](https://huggingface.co/z-lab/Qwen3-4B-Thinking-2507-PARO) |
+
+**Llama**
+
+| Model | Checkpoint |
+|---|---|
+| Llama-2-7B | [`z-lab/Llama-2-7b-hf-PARO`](https://huggingface.co/z-lab/Llama-2-7b-hf-PARO) |
+| Llama-3-8B | [`z-lab/Meta-Llama-3-8B-PARO`](https://huggingface.co/z-lab/Meta-Llama-3-8B-PARO) |
+| Llama-3-70B | [`z-lab/Meta-Llama-3-70B-PARO`](https://huggingface.co/z-lab/Meta-Llama-3-70B-PARO) |
+| Llama-3.1-8B-Instruct | [`z-lab/Llama-3.1-8B-Instruct-PARO`](https://huggingface.co/z-lab/Llama-3.1-8B-Instruct-PARO) |
+
+Want a model that's not listed? [Open an issue](https://github.com/z-lab/paroquant/issues/new) and let us know.
+
+## Installation
+
+```bash
+git clone https://github.com/z-lab/paroquant && cd paroquant
+
+pip install -e ".[vllm]"            # vLLM backend (GPU, recommended)
+pip install -e ".[transformers]"    # Transformers backend (GPU)
+pip install -e ".[mlx]"             # MLX backend (Apple Silicon)
+pip install -e ".[optim,eval]"      # Optimization & evaluation
+```
+
+Or use Docker: `docker run -it --gpus all --ipc=host ghcr.io/z-lab/paroquant:latest`
+
+## Quantize Your Own Model
+
+```bash
+# 1. Optimize rotation parameters
+experiments/optimize/4bit.sh Qwen/Qwen3-8B
+
+# 2. Export to HF checkpoint (--mode real for INT4, --mode pseudo for FP16)
+python -m paroquant.cli.convert \
+  --model Qwen/Qwen3-8B \
+  --result-dir output/Qwen3-8B \
+  --output-path models/Qwen3-8B-PARO
+```
 
 ## Reproduction
 
-In the [`experiments`](./experiments/) directory, we provide the original scripts that produce the models, experiment results, and figures in the paper. Please refer to the [README](./experiments/README.md) for more details.
+See [`experiments/README.md`](./experiments/README.md) for scripts to reproduce all results in the paper.
 
-## Docker
+## Docker Images
 
-We provide four docker images for easy environment setup:
+| Image | Purpose |
+|---|---|
+| `ghcr.io/z-lab/paroquant:latest` | Optimization & evaluation |
+| `ghcr.io/z-lab/paroquant:chat` | Interactive chat |
+| `ghcr.io/z-lab/paroquant:chat-cu130` | Interactive chat (CUDA 13.0 / ARM64) |
+| `ghcr.io/z-lab/paroquant:eval-reasoning` | Reasoning task evaluation |
 
-- `ghcr.io/z-lab/paroquant:latest` for optimization and non-reasoning task evaluation
-- `ghcr.io/z-lab/paroquant:chat` for running the chat app
-- `ghcr.io/z-lab/paroquant:chat-cu130` for running the chat app with CUDA 13.0
-- `ghcr.io/z-lab/paroquant:eval-reasoning` for reasoning task evaluation
+## Citation
 
-Use the following command to create a container and activate an interactive shell:
-
-```
-docker run -it --gpus all --ipc=host ghcr.io/z-lab/paroquant:<tag>
-```
-
-## Contribution
-
-Contributions are welcome! Please install `pre-commit` to ensure consistent code styles:
-
-```bash
-pip install pre-commit
-pre-commit install
-```
-
-## Reference
-
-If you find ParoQuant useful or relevant to your research, please kindly cite our paper:
-
-```
+```bibtex
 @inproceedings{liang2026paroquant,
   title     = {{ParoQuant: Pairwise Rotation Quantization for Efficient Reasoning LLM Inference}},
   author    = {Liang, Yesheng and Chen, Haisheng and Zhang, Zihan and Han, Song and Liu, Zhijian},
