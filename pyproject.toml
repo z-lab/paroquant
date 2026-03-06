@@ -22,6 +22,7 @@ Models = "https://huggingface.co/collections/z-lab/paroquant"
 [project.optional-dependencies]
 transformers = [
     "torch>=2.8",
+    "torchvision",
     "transformers>=4.55",
     "autoawq",
 ]
