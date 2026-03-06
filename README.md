@@ -8,7 +8,7 @@
   <a href="https://huggingface.co/collections/z-lab/paroquant"><img src="https://img.shields.io/badge/%F0%9F%A4%97-Models-yellow" alt="Models"></a>
 </p>
 
-State-of-the-art INT4 quantization for reasoning LLMs. ParoQuant uses learned pairwise rotations to suppress weight outliers, closing the accuracy gap with FP16 while running at near-AWQ speed. Supports NVIDIA GPUs (vLLM, Transformers) and Apple Silicon (MLX).
+State-of-the-art INT4 quantization for LLMs. ParoQuant uses learned pairwise rotations to suppress weight outliers, closing the accuracy gap with FP16 while running at near-AWQ speed. Supports NVIDIA GPUs (vLLM, Transformers) and Apple Silicon (MLX).
 
 <p align="center">
   <a href="https://youtu.be/fISG4CkizLM">
@@ -38,11 +38,11 @@ python -m paroquant.cli.chat --model z-lab/Qwen3-8B-PARO
 
 ## Models
 
-All models are available on the [Hugging Face](https://huggingface.co/collections/z-lab/paroquant). Swap the model name in the commands above to try any of them.
+All models are available on [Hugging Face](https://huggingface.co/collections/z-lab/paroquant). Swap the model name in the commands above to try any of them.
 
 **Qwen3**
 
-| Model | |
+| Model | Checkpoint |
 |---|---|
 | Qwen3-0.6B | [`z-lab/Qwen3-0.6B-PARO`](https://huggingface.co/z-lab/Qwen3-0.6B-PARO) |
 | Qwen3-1.7B | [`z-lab/Qwen3-1.7B-PARO`](https://huggingface.co/z-lab/Qwen3-1.7B-PARO) |
@@ -53,7 +53,7 @@ All models are available on the [Hugging Face](https://huggingface.co/collection
 
 **Llama**
 
-| Model | |
+| Model | Checkpoint |
 |---|---|
 | Llama-2-7B | [`z-lab/Llama-2-7b-hf-PARO`](https://huggingface.co/z-lab/Llama-2-7b-hf-PARO) |
 | Llama-3-8B | [`z-lab/Meta-Llama-3-8B-PARO`](https://huggingface.co/z-lab/Meta-Llama-3-8B-PARO) |
