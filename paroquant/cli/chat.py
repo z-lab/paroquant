@@ -16,7 +16,12 @@ from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.theme import Theme
 
-from paroquant.inference import GenerationParams, build_prompt, create_generator, detect_backend
+from paroquant.inference import (
+    GenerationParams,
+    build_prompt,
+    create_generator,
+    detect_backend,
+)
 
 
 @contextlib.contextmanager
@@ -119,6 +124,7 @@ class _ThinkingTracker:
 
 def _suppress_library_noise():
     warnings.filterwarnings("ignore")
+    os.environ.setdefault("TRANSFORMERS_NO_ADVISORY_WARNINGS", "1")
     os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
     os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
     os.environ.setdefault("VLLM_LOGGING_LEVEL", "ERROR")
@@ -201,6 +207,7 @@ async def run_chat_app(model: str, backend: str, params: GenerationParams):
 
 
 def main():
+    _suppress_library_noise()
     parser = argparse.ArgumentParser()
     parser.add_argument("--model", type=str, required=True)
     parser.add_argument("--backend", type=str, default="auto", choices=["auto", "vllm", "transformers", "mlx"])
