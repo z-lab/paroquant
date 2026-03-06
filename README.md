@@ -52,6 +52,15 @@ All models are available on [Hugging Face](https://huggingface.co/collections/z-
 | Qwen3-14B | [`z-lab/Qwen3-14B-PARO`](https://huggingface.co/z-lab/Qwen3-14B-PARO) |
 | Qwen3-4B-Thinking-2507 | [`z-lab/Qwen3-4B-Thinking-2507-PARO`](https://huggingface.co/z-lab/Qwen3-4B-Thinking-2507-PARO) |
 
+**Qwen3.5**
+
+| Model | Checkpoint |
+|---|---|
+| Qwen3.5-0.8B | [`z-lab/Qwen3.5-0.8B-PARO`](https://huggingface.co/z-lab/Qwen3.5-0.8B-PARO) |
+| Qwen3.5-2B | [`z-lab/Qwen3.5-2B-PARO`](https://huggingface.co/z-lab/Qwen3.5-2B-PARO) |
+| Qwen3.5-4B | [`z-lab/Qwen3.5-4B-PARO`](https://huggingface.co/z-lab/Qwen3.5-4B-PARO) |
+| Qwen3.5-9B | [`z-lab/Qwen3.5-9B-PARO`](https://huggingface.co/z-lab/Qwen3.5-9B-PARO) |
+
 **Llama**
 
 | Model | Checkpoint |
