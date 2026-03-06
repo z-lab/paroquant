@@ -2,7 +2,7 @@
 name = "paroquant"
 version = "0.1.0"
 requires-python = ">=3.11"
-description = "ParoQuant — Pairwise Rotation Quantization for LLMs"
+description = "State-of-the-art INT4 quantization for LLMs with near-lossless accuracy"
 readme = "README.md"
 license = "MIT"
 authors = [{ name = "Z Lab" }]
