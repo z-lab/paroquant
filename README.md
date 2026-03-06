@@ -102,6 +102,10 @@ We provide pre-quantized 4-bit ParoQuant models listed below. These are real-qua
 
 | Model                        | Hugging Face Path                                                                                           |
 | ---------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Qwen3.5-0.8B                 | [`z-lab/Qwen3.5-0.8B-PARO`](https://huggingface.co/z-lab/Qwen3.5-0.8B-PARO)                               |
+| Qwen3.5-2B                   | [`z-lab/Qwen3.5-2B-PARO`](https://huggingface.co/z-lab/Qwen3.5-2B-PARO)                                   |
+| Qwen3.5-4B                   | [`z-lab/Qwen3.5-4B-PARO`](https://huggingface.co/z-lab/Qwen3.5-4B-PARO)                                   |
+| Qwen3.5-9B                   | [`z-lab/Qwen3.5-9B-PARO`](https://huggingface.co/z-lab/Qwen3.5-9B-PARO)                                   |
 | Meta-Llama-3-8B              | [`z-lab/Meta-Llama-3-8B-PARO`](https://huggingface.co/z-lab/Meta-Llama-3-8B-PARO)                           |
 | Meta-Llama-3-70B             | [`z-lab/Meta-Llama-3-70B-PARO`](https://huggingface.co/z-lab/Meta-Llama-3-70B-PARO)                         |
 | Llama-3.1-8B-Instruct        | [`z-lab/Llama-3.1-8B-Instruct-PARO`](https://huggingface.co/z-lab/Llama-3.1-8B-Instruct-PARO)               |
