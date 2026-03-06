@@ -9,7 +9,9 @@
 ParoQuant compresses LLM weights to 4 bits with state-of-the-art accuracy and near-zero inference overhead. It runs on NVIDIA GPUs (via vLLM or Transformers) and Apple Silicon (via MLX).
 
 <p align="center">
-  <img src="assets/method.svg" width="100%" alt="ParoQuant Method">
+  <a href="https://youtu.be/fISG4CkizLM">
+    <img src="https://img.youtube.com/vi/fISG4CkizLM/maxresdefault.jpg" width="80%">
+  </a>
 </p>
 
 ## Quick Start
@@ -46,8 +48,6 @@ All models are available on the [Hugging Face](https://huggingface.co/collection
 | Qwen3-8B | [`z-lab/Qwen3-8B-PARO`](https://huggingface.co/z-lab/Qwen3-8B-PARO) |
 | Qwen3-14B | [`z-lab/Qwen3-14B-PARO`](https://huggingface.co/z-lab/Qwen3-14B-PARO) |
 | Qwen3-4B-Thinking-2507 | [`z-lab/Qwen3-4B-Thinking-2507-PARO`](https://huggingface.co/z-lab/Qwen3-4B-Thinking-2507-PARO) |
-
-Base (non-instruct) variants are also available: `z-lab/Qwen3-{0.6B,1.7B,4B,8B,14B}-Base-PARO`
 
 **Llama**
 

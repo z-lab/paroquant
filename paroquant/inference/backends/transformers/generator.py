@@ -22,39 +22,40 @@ _LOAD_KWARGS = dict(
 )
 
 
+@torch.no_grad()
 def _load_model(path: str):
-    try:
-        return AutoModelForImageTextToText.from_pretrained(path, **_LOAD_KWARGS)
-    except (ValueError, KeyError):
-        return AutoModelForCausalLM.from_pretrained(path, **_LOAD_KWARGS)
+    for auto_cls in (AutoModelForImageTextToText, AutoModelForCausalLM):
+        try:
+            model = auto_cls.from_pretrained(path, **_LOAD_KWARGS)
+            model.eval()
+            return model
+        except (ValueError, KeyError):
+            continue
+    raise ValueError(f"Failed to load model from {path}")
 
 
 class TransformersGenerator(BaseGenerator):
     backend = "transformers"
 
     def __init__(self, model: str):
-        with torch.no_grad():
-            self.model = _load_model(model)
-        self.model.eval()
+        self.model = _load_model(model)
         self.tokenizer = AutoTokenizer.from_pretrained(model)
 
     async def stream_generate(self, prompt: str, params: GenerationParams) -> AsyncIterator[str]:
         inputs = self.tokenizer(prompt, return_tensors="pt").to(self.model.device)
 
-        streamer = TextIteratorStreamer(
-            self.tokenizer, skip_prompt=True, skip_special_tokens=True
-        )
+        streamer = TextIteratorStreamer(self.tokenizer, skip_prompt=True, skip_special_tokens=True)
         thread = Thread(
             target=self.model.generate,
             kwargs={
                 **inputs,
-                "streamer": streamer,
                 "max_new_tokens": params.max_tokens,
                 "do_sample": params.temperature > 0,
+                "repetition_penalty": params.repetition_penalty if params.repetition_penalty > 1.0 else None,
                 "temperature": params.temperature if params.temperature > 0 else None,
                 "top_k": params.top_k if params.top_k > 0 else None,
-                "top_p": params.top_p,
-                "repetition_penalty": params.repetition_penalty if params.repetition_penalty > 1.0 else None,
+                "top_p": params.top_p if params.top_p < 1.0 else None,
+                "streamer": streamer,
             },
         )
         thread.start()

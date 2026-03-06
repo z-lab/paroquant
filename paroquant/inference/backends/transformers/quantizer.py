@@ -6,13 +6,20 @@ import logging
 import os
 from typing import TYPE_CHECKING
 
+import torch
+import torch.nn as nn
 from huggingface_hub import snapshot_download
+from safetensors import safe_open
 from transformers.quantizers.auto import (
     register_quantization_config,
     register_quantizer,
 )
 from transformers.quantizers.base import HfQuantizer
 from transformers.utils.quantization_config import QuantizationConfigMixin
+
+import paroquant.kernels.cuda  # noqa: F401 — registers torch.ops.rotation.rotate
+
+from .modules import RotateQuantizedLinear
 
 if TYPE_CHECKING:
     from transformers import PreTrainedModel
@@ -29,8 +36,6 @@ def _find_quantized_modules(model_path: str) -> set[str]:
         with open(index_file) as f:
             keys = json.load(f).get("weight_map", {}).keys()
     else:
-        from safetensors import safe_open
-
         keys = []
         for sf in sorted(glob.glob(os.path.join(local_dir, "*.safetensors"))):
             with safe_open(sf, framework="pt") as st:
@@ -71,28 +76,20 @@ class ParoQuantHfQuantizer(HfQuantizer):
     requires_calibration = True
 
     def validate_environment(self, **kwargs):
-        import torch
-
         if not torch.cuda.is_available():
             raise RuntimeError("ParoQuant requires CUDA.")
 
     def update_dtype(self, dtype):
-        import torch
-
         if dtype != torch.float16:
             logger.warning("ParoQuant requires float16. Overriding dtype=%s → float16.", dtype)
             return torch.float16
         return dtype
 
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        import torch.nn as nn
-
-        import paroquant.kernels.cuda  # noqa: F401 — registers torch.ops.rotation.rotate
-
-        from .modules import RotateQuantizedLinear
-
         qcfg = self.quantization_config
         quantized_modules = _find_quantized_modules(model.config._name_or_path)
+        if qcfg.modules_to_not_convert:
+            quantized_modules -= set(qcfg.modules_to_not_convert)
         logger.info("Found %d quantized modules in checkpoint.", len(quantized_modules))
 
         for name, module in model.named_modules():
@@ -116,9 +113,6 @@ class ParoQuantHfQuantizer(HfQuantizer):
                     krot=qcfg.krot,
                 ),
             )
-
-    def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        model.eval()
 
     @property
     def is_trainable(self) -> bool:
