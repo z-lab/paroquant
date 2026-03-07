@@ -43,22 +43,34 @@ ENV TORCH_CUDA_ARCH_LIST=${TORCH_CUDA_ARCH_LIST}
 # ---- chat: interactive vLLM inference ----
 FROM base AS chat
 ENV VLLM_WORKER_MULTIPROC_METHOD=spawn
-ARG VLLM_EXTRA_INDEX=""
-ARG VLLM_PIN=""
+ARG VLLM_VERSION=""
+ARG CUDA_TOOLKIT=""
 COPY . .
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install -e ".[vllm]" ${VLLM_PIN} ${VLLM_EXTRA_INDEX}
+    if [ -n "$VLLM_VERSION" ] && [ -n "$CUDA_TOOLKIT" ]; then \
+        pip install -e ".[vllm]" "vllm==${VLLM_VERSION}" \
+            --extra-index-url "https://wheels.vllm.ai/${VLLM_VERSION}/${CUDA_TOOLKIT}" \
+            --extra-index-url "https://download.pytorch.org/whl/${CUDA_TOOLKIT}"; \
+    else \
+        pip install -e ".[vllm]"; \
+    fi
 ENV TRITON_PTXAS_PATH=/usr/local/cuda/bin/ptxas
 ENTRYPOINT ["python", "-m", "paroquant.cli.chat"]
 
 # ---- serve: OpenAI-compatible vLLM API server ----
 FROM base AS serve
 ENV VLLM_WORKER_MULTIPROC_METHOD=spawn
-ARG VLLM_EXTRA_INDEX=""
-ARG VLLM_PIN=""
+ARG VLLM_VERSION=""
+ARG CUDA_TOOLKIT=""
 COPY . .
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install -e ".[vllm]" ${VLLM_PIN} ${VLLM_EXTRA_INDEX}
+    if [ -n "$VLLM_VERSION" ] && [ -n "$CUDA_TOOLKIT" ]; then \
+        pip install -e ".[vllm]" "vllm==${VLLM_VERSION}" \
+            --extra-index-url "https://wheels.vllm.ai/${VLLM_VERSION}/${CUDA_TOOLKIT}" \
+            --extra-index-url "https://download.pytorch.org/whl/${CUDA_TOOLKIT}"; \
+    else \
+        pip install -e ".[vllm]"; \
+    fi
 ENV TRITON_PTXAS_PATH=/usr/local/cuda/bin/ptxas
 ENTRYPOINT ["python", "-m", "paroquant.cli.serve"]
 
