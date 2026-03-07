@@ -50,6 +50,16 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 ENV TRITON_PTXAS_PATH=/usr/local/cuda/bin/ptxas
 ENTRYPOINT ["python", "-m", "paroquant.cli.chat"]
 
+# ---- serve: OpenAI-compatible vLLM API server ----
+FROM base AS serve
+ENV VLLM_WORKER_MULTIPROC_METHOD=spawn
+ARG VLLM_EXTRA_INDEX=""
+COPY . .
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -e ".[vllm]" ${VLLM_EXTRA_INDEX}
+ENV TRITON_PTXAS_PATH=/usr/local/cuda/bin/ptxas
+ENTRYPOINT ["python", "-m", "paroquant.cli.serve"]
+
 # ---- optim: optimization & evaluation ----
 FROM base AS optim
 COPY . .

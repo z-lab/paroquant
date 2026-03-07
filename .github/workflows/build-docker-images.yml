@@ -33,6 +33,13 @@ jobs:
             vllm_extra_index: "--extra-index-url https://wheels.vllm.ai/0.15.1/cu130 --extra-index-url https://download.pytorch.org/whl/cu130"
             platforms: linux/amd64,linux/arm64
 
+          - tag: serve
+            target: serve
+            cuda_version: "13.0.2"
+            torch_cuda_arch_list: "8.0 8.6 8.7 8.9 9.0 10.0 12.0 12.1"
+            vllm_extra_index: "--extra-index-url https://wheels.vllm.ai/0.15.1/cu130 --extra-index-url https://download.pytorch.org/whl/cu130"
+            platforms: linux/amd64,linux/arm64
+
           - tag: chat-cu129
             target: chat
             cuda_version: "12.9.1"
