@@ -22,7 +22,7 @@ import warnings
 
 os.environ["PYTHONWARNINGS"] = "ignore"
 warnings.filterwarnings("ignore")
-logging.disable(logging.INFO)
+logging.disable(logging.CRITICAL)
 
 from qwen_agent.agents import Assistant  # noqa: E402
 from rich.console import Console  # noqa: E402
@@ -262,13 +262,15 @@ def main():
                 resp_name, resp_summary = _extract_tool_response(response)
                 if resp_name and resp_name not in seen_tool_responses:
                     seen_tool_responses.add(resp_name)
-                    console.print(Panel(
-                        resp_summary or "ok",
-                        title=f"{resp_name} response",
-                        border_style="green",
-                        width=min(console.width, 80),
-                        height=min(8, (resp_summary or "").count("\n") + 3),
-                    ))
+                    console.print(
+                        Panel(
+                            resp_summary or "ok",
+                            title=f"{resp_name} response",
+                            border_style="green",
+                            width=min(console.width, 80),
+                            height=min(8, (resp_summary or "").count("\n") + 3),
+                        )
+                    )
                     phase = "tool_response"
                     continue
 
