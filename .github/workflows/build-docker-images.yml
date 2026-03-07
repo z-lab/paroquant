@@ -5,6 +5,7 @@ permissions:
   packages: write
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
@@ -19,53 +20,46 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  discover:
-    runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Discover Dockerfiles in docker/
-        id: set-matrix
-        shell: bash
-        run: |
-          set -euo pipefail
-          files=(docker/*)
-          include=()
-          for file in "${files[@]}"; do
-            if [[ -f "$file" ]]; then
-              name="$(basename "$file" | tr '.' '-')"
-              filename="$(basename "$file")"
-              if [[ "$filename" == "Dockerfile" ]]; then
-                tag="latest"
-              else
-                tag="${filename#Dockerfile.}"
-              fi
-              if [[ "$tag" == *"cu130"* ]]; then
-                platforms="linux/amd64,linux/arm64"
-              else
-                platforms="linux/amd64"
-              fi
-              include+=("{\"name\":\"$name\",\"file\":\"$file\",\"tag\":\"$tag\",\"platforms\":\"$platforms\"}")
-            fi
-          done
-
-          if [[ ${#include[@]} -eq 0 ]]; then
-            echo "No files found in docker/" >&2
-            exit 1
-          fi
-
-          matrix="{\"include\":[$(IFS=,; echo "${include[*]}")]}"
-          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
-
   build:
     runs-on: ubuntu-latest
-    needs: discover
     strategy:
       fail-fast: false
-      matrix: ${{ fromJson(needs.discover.outputs.matrix) }}
+      matrix:
+        include:
+          - tag: chat
+            target: chat
+            cuda_version: "13.0.2"
+            torch_cuda_arch_list: "8.0 8.6 8.7 8.9 9.0 10.0 12.0 12.1"
+            vllm_version: "0.15.1"
+            cuda_toolkit: "cu130"
+            platforms: linux/amd64,linux/arm64
+
+          - tag: serve
+            target: serve
+            cuda_version: "13.0.2"
+            torch_cuda_arch_list: "8.0 8.6 8.7 8.9 9.0 10.0 12.0 12.1"
+            vllm_version: "0.15.1"
+            cuda_toolkit: "cu130"
+            platforms: linux/amd64,linux/arm64
+
+          - tag: chat-cu129
+            target: chat
+            cuda_version: "12.9.1"
+            torch_cuda_arch_list: "8.0 8.6 8.7 8.9 9.0 10.0 12.0"
+            platforms: linux/amd64
+
+          - tag: latest
+            target: optim
+            cuda_version: "13.0.2"
+            torch_cuda_arch_list: "8.0 8.6 8.7 8.9 9.0 10.0 12.0 12.1"
+            platforms: linux/amd64,linux/arm64
+
+          - tag: eval
+            target: eval
+            cuda_version: "13.0.2"
+            torch_cuda_arch_list: "8.0 8.6 8.7 8.9 9.0 10.0 12.0 12.1"
+            platforms: linux/amd64,linux/arm64
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -83,13 +77,19 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and publish ${{ matrix.file }} (${{ matrix.platforms }})
+      - name: Build and publish ${{ matrix.tag }} (${{ matrix.platforms }})
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: ${{ matrix.file }}
+          file: docker/Dockerfile
+          target: ${{ matrix.target }}
           push: true
           tags: ghcr.io/${{ github.repository }}:${{ matrix.tag }}
           platforms: ${{ matrix.platforms }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          build-args: |
+            CUDA_VERSION=${{ matrix.cuda_version }}
+            TORCH_CUDA_ARCH_LIST=${{ matrix.torch_cuda_arch_list }}
+            VLLM_VERSION=${{ matrix.vllm_version }}
+            CUDA_TOOLKIT=${{ matrix.cuda_toolkit }}
+          cache-from: type=gha,scope=${{ matrix.tag }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.tag }}

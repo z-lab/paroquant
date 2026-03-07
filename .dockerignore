@@ -1,4 +1,6 @@
 .git
+.github/
+.cursor/
 assets/
 docker/
 output/

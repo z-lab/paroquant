@@ -28,6 +28,7 @@ transformers = [
 ]
 vllm = [
     "vllm>=0.15",
+    "accelerate",
 ]
 mlx = [
     "mlx",
