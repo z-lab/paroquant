@@ -43,10 +43,10 @@ jobs:
               else
                 tag="${filename#Dockerfile.}"
               fi
-              if [[ "$tag" == *"cu130"* ]]; then
-                platforms="linux/amd64,linux/arm64"
-              else
+              if [[ "$tag" == *"cu129"* ]]; then
                 platforms="linux/amd64"
+              else
+                platforms="linux/amd64,linux/arm64"
               fi
               include+=("{\"name\":\"$name\",\"file\":\"$file\",\"tag\":\"$tag\",\"platforms\":\"$platforms\"}")
             fi
