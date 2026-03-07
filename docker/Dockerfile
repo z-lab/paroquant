@@ -44,9 +44,10 @@ ENV TORCH_CUDA_ARCH_LIST=${TORCH_CUDA_ARCH_LIST}
 FROM base AS chat
 ENV VLLM_WORKER_MULTIPROC_METHOD=spawn
 ARG VLLM_EXTRA_INDEX=""
+ARG VLLM_PIN=""
 COPY . .
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install -e ".[vllm]" ${VLLM_EXTRA_INDEX}
+    pip install -e ".[vllm]" ${VLLM_PIN} ${VLLM_EXTRA_INDEX}
 ENV TRITON_PTXAS_PATH=/usr/local/cuda/bin/ptxas
 ENTRYPOINT ["python", "-m", "paroquant.cli.chat"]
 
@@ -54,9 +55,10 @@ ENTRYPOINT ["python", "-m", "paroquant.cli.chat"]
 FROM base AS serve
 ENV VLLM_WORKER_MULTIPROC_METHOD=spawn
 ARG VLLM_EXTRA_INDEX=""
+ARG VLLM_PIN=""
 COPY . .
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install -e ".[vllm]" ${VLLM_EXTRA_INDEX}
+    pip install -e ".[vllm]" ${VLLM_PIN} ${VLLM_EXTRA_INDEX}
 ENV TRITON_PTXAS_PATH=/usr/local/cuda/bin/ptxas
 ENTRYPOINT ["python", "-m", "paroquant.cli.serve"]
 

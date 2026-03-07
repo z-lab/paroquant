@@ -30,6 +30,7 @@ jobs:
             target: chat
             cuda_version: "13.0.2"
             torch_cuda_arch_list: "8.0 8.6 8.7 8.9 9.0 10.0 12.0 12.1"
+            vllm_pin: "vllm==0.15.1"
             vllm_extra_index: "--extra-index-url https://wheels.vllm.ai/0.15.1/cu130 --extra-index-url https://download.pytorch.org/whl/cu130"
             platforms: linux/amd64,linux/arm64
 
@@ -37,6 +38,7 @@ jobs:
             target: serve
             cuda_version: "13.0.2"
             torch_cuda_arch_list: "8.0 8.6 8.7 8.9 9.0 10.0 12.0 12.1"
+            vllm_pin: "vllm==0.15.1"
             vllm_extra_index: "--extra-index-url https://wheels.vllm.ai/0.15.1/cu130 --extra-index-url https://download.pytorch.org/whl/cu130"
             platforms: linux/amd64,linux/arm64
 
@@ -44,6 +46,7 @@ jobs:
             target: chat
             cuda_version: "12.9.1"
             torch_cuda_arch_list: "8.0 8.6 8.7 8.9 9.0 10.0 12.0"
+            vllm_pin: ""
             vllm_extra_index: ""
             platforms: linux/amd64
 
@@ -88,6 +91,7 @@ jobs:
           build-args: |
             CUDA_VERSION=${{ matrix.cuda_version }}
             TORCH_CUDA_ARCH_LIST=${{ matrix.torch_cuda_arch_list }}
+            VLLM_PIN=${{ matrix.vllm_pin }}
             VLLM_EXTRA_INDEX=${{ matrix.vllm_extra_index }}
           cache-from: type=gha,scope=${{ matrix.tag }}
           cache-to: type=gha,mode=max,scope=${{ matrix.tag }}

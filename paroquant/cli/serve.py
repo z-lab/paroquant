@@ -5,7 +5,7 @@ from __future__ import annotations
 import sys
 
 import paroquant.inference.backends.vllm.plugin  # noqa: F401 — registers quantization config
-from vllm.entrypoints.openai.run_server import run_server
+from vllm.entrypoints.openai.api_server import run_server
 
 
 def main():
