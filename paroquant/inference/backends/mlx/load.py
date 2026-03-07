@@ -148,7 +148,7 @@ def _is_io_layer(path, module):
     return hasattr(module, "to_quantized") and (path.endswith("embed_tokens") or path.endswith("lm_head"))
 
 
-def load(model_path: str, lazy: bool = False) -> tuple:
+def load(model_path: str, lazy: bool = False, force_text: bool = False) -> tuple:
     """Load a ParoQuant model for MLX. Returns (model, processor, is_vlm)."""
     from huggingface_hub import snapshot_download
 
@@ -165,7 +165,7 @@ def load(model_path: str, lazy: bool = False) -> tuple:
     paro = config.get("quantization_config", {})
     group_size = int(paro.get("group_size", 128))
     bits = int(paro.get("bits", 4))
-    is_vlm = "vision_config" in config
+    is_vlm = "vision_config" in config and not force_text
 
     model = _create_model(config, is_vlm)
 
