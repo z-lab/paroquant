@@ -1,16 +1,15 @@
-"""Thin wrapper around ``vllm serve`` that auto-registers the ParoQuant quantization plugin."""
-
 from __future__ import annotations
 
 import asyncio
 import sys
 
-import paroquant.inference.backends.vllm.plugin  # noqa: F401 — registers quantization config
 from vllm.entrypoints.openai.api_server import (
     FlexibleArgumentParser,
     make_arg_parser,
     run_server,
 )
+
+import paroquant.inference.backends.vllm.plugin  # noqa: F401 — registers quantization config
 
 
 def main():

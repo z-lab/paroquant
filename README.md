@@ -19,27 +19,49 @@ State-of-the-art INT4 quantization for LLMs. ParoQuant uses learned pairwise rot
 
 ## Quick Start
 
-**NVIDIA GPU:**
+### Interactive Chat
 
 ```bash
+# NVIDIA GPU
 pip install "paroquant[vllm]"
 python -m paroquant.cli.chat --model z-lab/Qwen3-8B-PARO
 
-# or with Docker
-docker run --pull=always --rm -it --gpus all --ipc=host \
-  ghcr.io/z-lab/paroquant:chat --model z-lab/Qwen3-8B-PARO
-```
-
-**Apple Silicon:**
-
-```bash
+# Apple Silicon
 pip install "paroquant[mlx]"
 python -m paroquant.cli.chat --model z-lab/Qwen3-8B-PARO
+```
+
+### OpenAI-Compatible API Server
+
+```bash
+pip install "paroquant[vllm]"
+python -m paroquant.cli.serve --model z-lab/Qwen3-8B-PARO
+```
+
+### Docker
+
+```bash
+# Interactive chat
+docker run --pull=always --rm -it --gpus all --ipc=host \
+  ghcr.io/z-lab/paroquant:chat --model z-lab/Qwen3-8B-PARO
+
+# API server (port 8000)
+docker run --pull=always --rm -it --gpus all --ipc=host -p 8000:8000 \
+  ghcr.io/z-lab/paroquant:serve --model z-lab/Qwen3-8B-PARO
 ```
 
 ## Models
 
 All models are available on [Hugging Face](https://huggingface.co/collections/z-lab/paroquant). Swap the model name in the commands above to try any of them.
+
+**Qwen3.5**
+
+| Model | Checkpoint |
+|---|---|
+| Qwen3.5-0.8B | [`z-lab/Qwen3.5-0.8B-PARO`](https://huggingface.co/z-lab/Qwen3.5-0.8B-PARO) |
+| Qwen3.5-2B | [`z-lab/Qwen3.5-2B-PARO`](https://huggingface.co/z-lab/Qwen3.5-2B-PARO) |
+| Qwen3.5-4B | [`z-lab/Qwen3.5-4B-PARO`](https://huggingface.co/z-lab/Qwen3.5-4B-PARO) |
+| Qwen3.5-9B | [`z-lab/Qwen3.5-9B-PARO`](https://huggingface.co/z-lab/Qwen3.5-9B-PARO) |
 
 **Qwen3**
 
@@ -50,15 +72,6 @@ All models are available on [Hugging Face](https://huggingface.co/collections/z-
 | Qwen3-4B | [`z-lab/Qwen3-4B-PARO`](https://huggingface.co/z-lab/Qwen3-4B-PARO) |
 | Qwen3-8B | [`z-lab/Qwen3-8B-PARO`](https://huggingface.co/z-lab/Qwen3-8B-PARO) |
 | Qwen3-14B | [`z-lab/Qwen3-14B-PARO`](https://huggingface.co/z-lab/Qwen3-14B-PARO) |
-
-**Qwen3.5**
-
-| Model | Checkpoint |
-|---|---|
-| Qwen3.5-0.8B | [`z-lab/Qwen3.5-0.8B-PARO`](https://huggingface.co/z-lab/Qwen3.5-0.8B-PARO) |
-| Qwen3.5-2B | [`z-lab/Qwen3.5-2B-PARO`](https://huggingface.co/z-lab/Qwen3.5-2B-PARO) |
-| Qwen3.5-4B | [`z-lab/Qwen3.5-4B-PARO`](https://huggingface.co/z-lab/Qwen3.5-4B-PARO) |
-| Qwen3.5-9B | [`z-lab/Qwen3.5-9B-PARO`](https://huggingface.co/z-lab/Qwen3.5-9B-PARO) |
 
 **Llama**
 
@@ -106,10 +119,10 @@ python -m paroquant.cli.convert \
 
 | Image | Purpose |
 |---|---|
-| `ghcr.io/z-lab/paroquant:latest` | Optimization & evaluation |
-| `ghcr.io/z-lab/paroquant:chat` | Interactive chat (CUDA 13.0) |
-| `ghcr.io/z-lab/paroquant:serve` | OpenAI-compatible API server |
+| `ghcr.io/z-lab/paroquant:chat` | Interactive chat |
 | `ghcr.io/z-lab/paroquant:chat-cu129` | Interactive chat (CUDA 12.9) |
+| `ghcr.io/z-lab/paroquant:serve` | OpenAI-compatible API server |
+| `ghcr.io/z-lab/paroquant:latest` | Optimization & evaluation |
 | `ghcr.io/z-lab/paroquant:eval` | Reasoning task evaluation |
 
 ## Citation
