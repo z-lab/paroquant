@@ -27,7 +27,7 @@ transformers = [
     "autoawq",
 ]
 vllm = [
-    "vllm>=0.15",
+    "vllm>=0.17",
     "accelerate",
 ]
 mlx = [
