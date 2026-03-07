@@ -109,7 +109,7 @@ python -m paroquant.cli.convert \
 | `ghcr.io/z-lab/paroquant:latest` | Optimization & evaluation |
 | `ghcr.io/z-lab/paroquant:chat` | Interactive chat (CUDA 13.0) |
 | `ghcr.io/z-lab/paroquant:chat-cu129` | Interactive chat (CUDA 12.9) |
-| `ghcr.io/z-lab/paroquant:eval-reasoning` | Reasoning task evaluation |
+| `ghcr.io/z-lab/paroquant:eval` | Reasoning task evaluation |
 
 ## Citation
 

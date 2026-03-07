@@ -1,9 +1,7 @@
-
-ARG CUDA_VERSION=12.9.1
-FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu22.04
+ARG CUDA_VERSION=13.0.2
+FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu22.04 AS base
 
 LABEL org.opencontainers.image.source=https://github.com/z-lab/paroquant
-LABEL org.opencontainers.image.description="Container for optimization and HuggingFace inference"
 LABEL org.opencontainers.image.licenses=MIT
 
 ARG PYTHON_VERSION=3.12
@@ -38,10 +36,31 @@ RUN python3 -m venv /opt/venv
 
 ENV VIRTUAL_ENV=/opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
-ENV TORCH_CUDA_ARCH_LIST="8.0 8.6 8.7 8.9 9.0 10.0 12.0"
 
+ARG TORCH_CUDA_ARCH_LIST="8.0 8.6 8.7 8.9 9.0 10.0 12.0 12.1"
+ENV TORCH_CUDA_ARCH_LIST=${TORCH_CUDA_ARCH_LIST}
+
+# ---- chat: interactive vLLM inference ----
+FROM base AS chat
+ENV VLLM_WORKER_MULTIPROC_METHOD=spawn
+ARG VLLM_EXTRA_INDEX=""
 COPY . .
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -e ".[vllm]" ${VLLM_EXTRA_INDEX}
+ENV TRITON_PTXAS_PATH=/usr/local/cuda/bin/ptxas
+ENTRYPOINT ["python", "-m", "paroquant.cli.chat"]
 
-RUN pip install -e ".[optim,eval]" --no-cache-dir
+# ---- optim: optimization & evaluation ----
+FROM base AS optim
+COPY . .
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -e ".[optim,eval]"
+CMD ["/bin/bash"]
 
+# ---- eval: reasoning task evaluation ----
+FROM base AS eval
+COPY . .
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install -r ./experiments/tasks/reasoning/requirements.txt
+RUN pip install -e . --no-cache-dir --no-deps
 CMD ["/bin/bash"]
