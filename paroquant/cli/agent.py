@@ -36,13 +36,14 @@ def _suppress_library_noise():
     logging.disable(logging.CRITICAL)
 
 
-def _make_agent(server: str, model: str, workspace: str) -> Assistant:
+def _make_agent(server: str, model: str, workspace: str, max_tokens: int = 8192) -> Assistant:
     llm_cfg = {
         "model": model,
         "model_type": "qwenvl_oai",
         "model_server": server,
         "api_key": os.environ.get("OPENAI_API_KEY", "EMPTY"),
         "generate_cfg": {
+            "max_tokens": max_tokens,
             "timeout": 120,
             "max_retries": 1,
             "temperature": 0.7,
@@ -144,16 +145,17 @@ def main():
     parser.add_argument("--server", type=str, default="http://127.0.0.1:8000/v1")
     parser.add_argument("--model", type=str, required=True)
     parser.add_argument("--workspace", type=str, default=None)
+    parser.add_argument("--max-tokens", type=int, default=8192)
     args = parser.parse_args()
 
     workspace = args.workspace or tempfile.mkdtemp(prefix="paroquant-agent-")
     console = Console(theme=Theme({"hint": "dim", "tool": "cyan"}))
 
     console.print("[hint]Connecting to model server and initializing tools...[/hint]")
-    agent = _make_agent(args.server, args.model, workspace)
+    agent = _make_agent(args.server, args.model, workspace, args.max_tokens)
 
     console.print("[hint]Warming up...[/hint]")
-    warmup = _make_agent(args.server, args.model, workspace)
+    warmup = _make_agent(args.server, args.model, workspace, max_tokens=16)
     for _ in warmup.run(messages=[{"role": "user", "content": "Hi"}]):
         pass
     del warmup
