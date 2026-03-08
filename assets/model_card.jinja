@@ -1,0 +1,84 @@
+{% set model_name = base_model.split("/")[-1] -%}
+{% set paro_model_path = "z-lab/" + base_model.split("/")[-1] + "-PARO" -%}
+
+---
+library_name: transformers
+license: apache-2.0
+{% if pipeline_tag -%} pipeline_tag: {{ pipeline_tag }} {%- endif %}
+base_model:
+- {{ base_model }}
+---
+
+# {{ paro_model_path }}
+
+**Pairwise Rotation Quantization for Efficient Reasoning LLM Inference**
+
+<p>
+  <a href="https://arxiv.org/abs/2511.10645"><img src="https://img.shields.io/badge/arXiv-2511.10645-b31b1b.svg" alt="Paper"></a>
+  <a href="https://paroquant.z-lab.ai"><img src="https://img.shields.io/badge/Blog-ParoQuant-blue" alt="Blog"></a>
+  <a href="https://huggingface.co/collections/z-lab/paroquant"><img src="https://img.shields.io/badge/%F0%9F%A4%97-Models-yellow" alt="Models"></a>
+  <a href="https://pypi.org/project/paroquant/"><img src="https://img.shields.io/pypi/v/paroquant" alt="PyPI"></a>
+</p>
+
+ParoQuant is the state-of-the-art INT4 quantization for LLMs. It closes the accuracy gap with FP16 while running at near-AWQ speed. Supports NVIDIA GPUs (vLLM, Transformers) and Apple Silicon (MLX).
+
+[`{{ paro_model_path }}`](https://huggingface.co/{{ paro_model_path }}) is a 4-bit [`{{ base_model }}`](https://huggingface.co/{{ base_model }}) quantized with [ParoQuant](https://github.com/z-lab/paroquant). Check out other ParoQuant models from the Hugging Face [collection](https://huggingface.co/collections/z-lab/paroquant). Swap the model name in the commands below to try any of them.
+
+
+## Quick Start
+
+### Installation
+
+```bash
+# NVIDIA GPU
+pip install "paroquant[vllm]"
+
+# Apple Silicon
+pip install "paroquant[mlx]"
+```
+
+### Interactive Chat
+
+```bash
+python -m paroquant.cli.chat --model {{ paro_model_path }}
+```
+
+### OpenAI-Compatible API Server
+
+```bash
+python -m paroquant.cli.serve --model {{ paro_model_path }} --port 8000
+```
+
+### Agent with Tool Calling
+
+Start the API server first, then install the agent dependencies and run:
+
+```bash
+pip install "paroquant[agent]"
+python -m paroquant.cli.agent --model {{ paro_model_path }}
+```
+
+Tool use (web fetch, filesystem, time) requires [Node.js](https://nodejs.org/en/download).
+
+### Docker (NVIDIA GPU)
+
+```bash
+# Interactive chat
+docker run --pull=always --rm -it --gpus all --ipc=host \
+  ghcr.io/z-lab/paroquant:chat --model {{ paro_model_path }}
+
+# API server (port 8000)
+docker run --pull=always --rm -it --gpus all --ipc=host -p 8000:8000 \
+  ghcr.io/z-lab/paroquant:serve --model {{ paro_model_path }}
+```
+
+## Citation
+
+```bibtex
+@inproceedings{liang2026paroquant,
+  title     = {% raw %}{{ParoQuant: Pairwise Rotation Quantization for Efficient Reasoning LLM Inference}}{% endraw %},
+  author    = {Liang, Yesheng and Chen, Haisheng and Zhang, Zihan and Han, Song and Liu, Zhijian},
+  booktitle = {International Conference on Learning Representations (ICLR)},
+  year      = {2026}
+}
+```
