@@ -49,6 +49,7 @@ python -m paroquant.cli.chat --model {{ paro_model_path }}
 python -m paroquant.cli.serve --model {{ paro_model_path }} --port 8000
 ```
 
+{% if supports_tool_call -%}
 ### Agent with Tool Calling
 
 Start the API server first, then install the agent dependencies and run:
@@ -59,6 +60,7 @@ python -m paroquant.cli.agent --model {{ paro_model_path }}
 ```
 
 Tool use (web fetch, filesystem, time) requires [Node.js](https://nodejs.org/en/download).
+{%- endif %}
 
 ### Docker (NVIDIA GPU)
 
