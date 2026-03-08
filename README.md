@@ -19,35 +19,55 @@ State-of-the-art INT4 quantization for LLMs. ParoQuant uses learned pairwise rot
 
 ## Quick Start
 
-### Interactive Chat
+### Installation
 
 ```bash
 # NVIDIA GPU
 pip install "paroquant[vllm]"
-python -m paroquant.cli.chat --model z-lab/Qwen3-8B-PARO
 
 # Apple Silicon
 pip install "paroquant[mlx]"
-python -m paroquant.cli.chat --model z-lab/Qwen3-8B-PARO
+```
+
+Pick a model from our [Hugging Face collection](https://huggingface.co/collections/z-lab/paroquant):
+
+```bash
+export MODEL=z-lab/Qwen3.5-4B-PARO
+```
+
+### Interactive Chat
+
+```bash
+python -m paroquant.cli.chat --model $MODEL
 ```
 
 ### OpenAI-Compatible API Server
 
 ```bash
-pip install "paroquant[vllm]"
-python -m paroquant.cli.serve --model z-lab/Qwen3-8B-PARO
+python -m paroquant.cli.serve --model $MODEL --port 8000
 ```
 
-### Docker
+### Agent with Tool Calling
+
+Start the API server first, then install the agent dependencies and run:
+
+```bash
+pip install "paroquant[agent]"
+python -m paroquant.cli.agent --model $MODEL
+```
+
+Tool use (web fetch, filesystem, time) requires [uv](https://docs.astral.sh/uv/) and [Node.js](https://nodejs.org/en/download).
+
+### Docker (NVIDIA GPU)
 
 ```bash
 # Interactive chat
 docker run --pull=always --rm -it --gpus all --ipc=host \
-  ghcr.io/z-lab/paroquant:chat --model z-lab/Qwen3-8B-PARO
+  ghcr.io/z-lab/paroquant:chat --model $MODEL
 
 # API server (port 8000)
 docker run --pull=always --rm -it --gpus all --ipc=host -p 8000:8000 \
-  ghcr.io/z-lab/paroquant:serve --model z-lab/Qwen3-8B-PARO
+  ghcr.io/z-lab/paroquant:serve --model $MODEL
 ```
 
 ## Models

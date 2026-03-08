@@ -1,6 +1,6 @@
 [project]
 name = "paroquant"
-version = "0.1.3"
+version = "0.1.4"
 requires-python = ">=3.11"
 description = "ParoQuant — Pairwise Rotation Quantization for LLMs"
 readme = "README.md"
@@ -44,6 +44,11 @@ optim = [
 eval = [
     "lm_eval",
     "zstandard",
+]
+agent = [
+    "qwen-agent",
+    "mcp",
+    "soundfile",
 ]
 dev = [
     "pytest",

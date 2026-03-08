@@ -147,6 +147,11 @@ async def run_chat_app(model: str, backend: str, params: GenerationParams):
 
     console.print(f"[hint]Loading model ({backend})...[/hint]")
     generator = create_generator(backend, model)
+
+    console.print("[hint]Warming up...[/hint]")
+    warmup_prompt = build_prompt(generator.tokenizer, [{"role": "user", "content": "Hi"}], False)
+    await generator.generate(warmup_prompt, GenerationParams(max_tokens=1, temperature=0.0))
+
     console.clear()
 
     enable_thinking = False

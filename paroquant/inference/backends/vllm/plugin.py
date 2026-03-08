@@ -26,6 +26,7 @@ logger = init_logger(__name__)
 
 _SHARD_INDEX = {"q": 0, "k": 1, "v": 2}
 _QUANT_TYPE = {4: scalar_types.uint4}
+_MARLIN_TILE_N = 64
 
 
 def _rotation_weight_loader(
@@ -103,15 +104,25 @@ class ParoQuantConfig(QuantizationConfig):
 
         unquant_dtypes = [torch.float16, torch.bfloat16, torch.float32]
         metadata = get_safetensors_params_metadata(model_name, revision=revision)
-        all_layers = {k.rsplit(".", 1)[0] for k in metadata}
-        quant_layers: set[str] = {
+
+        # Only consider leaf modules (those with ".weight"), not containers
+        # that have scalar FP16 params (e.g. A_log) which would false-match.
+        leaf_modules = {k.rsplit(".", 1)[0] for k in metadata if k.endswith(".weight")}
+        quant_modules: set[str] = {
             k.rsplit(".", 1)[0]
             for k, info in metadata.items()
             if (dt := info.get("dtype")) and _SF_DTYPES[dt] not in unquant_dtypes
         }
-        # Strip "model." prefix so names match vLLM's internal module prefixes
-        # (safetensors keys use "model.X" but vLLM's get_quant_method receives "X").
-        self.modules_to_not_convert = [k.removeprefix("model.") for k in (all_layers - quant_layers)]
+        # Strip to "layers.N..." suffix so vLLM's substr matching works
+        # regardless of model nesting depth (safetensors may store
+        # "model.language_model.layers.0.X" while vLLM uses
+        # "language_model.model.layers.0.X").
+        def _strip(name: str) -> str:
+            name = name.removeprefix("model.")
+            i = name.find("layers.")
+            return name[i:] if i >= 0 else name
+
+        self.modules_to_not_convert = [_strip(k) for k in leaf_modules - quant_modules]
 
     def get_quant_method(self, layer: torch.nn.Module, prefix: str) -> LinearMethodBase | None:
         if not isinstance(layer, LinearBase):
@@ -170,6 +181,15 @@ class ParoQuantLinearMethod(AWQMarlinLinearMethod):
 
     def _convert_partition(self, qw, sc, qz, k, out_n, num_groups):
         """AWQ→Marlin conversion for a single partition via the parent method."""
+        # Pad output dim to Marlin tile boundary when needed.
+        if out_n % _MARLIN_TILE_N != 0:
+            pad = _MARLIN_TILE_N - out_n % _MARLIN_TILE_N
+            pack = self.quant_config.pack_factor
+            qw = torch.nn.functional.pad(qw, (0, pad // pack))
+            sc = torch.nn.functional.pad(sc, (0, pad))
+            qz = torch.nn.functional.pad(qz, (0, pad // pack))
+            out_n += pad
+
         proxy = torch.nn.Module()
         proxy.register_parameter("qweight", Parameter(qw.contiguous(), requires_grad=False))
         proxy.register_parameter("scales", Parameter(sc.contiguous(), requires_grad=False))
@@ -203,6 +223,7 @@ class ParoQuantLinearMethod(AWQMarlinLinearMethod):
             layer.workspace = proxies[0].workspace
             layer.g_idx = proxies[0].g_idx
             layer.g_idx_sort_indices = proxies[0].g_idx_sort_indices
+            layer.padded_partition_sizes = [p.output_size_per_partition for p in proxies]
 
         layer.rot_theta = layer.theta.data
         layer.rot_pairs = layer.pairs.data
@@ -219,21 +240,22 @@ class ParoQuantLinearMethod(AWQMarlinLinearMethod):
         outputs = []
         for i in range(n):
             x_rot = torch.ops.rotation.rotate(x, layer.rot_pairs[i], layer.rot_theta[i], layer.rot_scales[i])
-            outputs.append(
-                apply_awq_marlin_linear(
-                    input=x_rot,
-                    weight=layer.marlin_qweight[i],
-                    weight_scale=layer.marlin_scales[i],
-                    weight_zp=layer.marlin_qzeros[i],
-                    g_idx=layer.g_idx,
-                    g_idx_sort_indices=layer.g_idx_sort_indices,
-                    workspace=layer.workspace,
-                    quant_type=self.quant_config.quant_type,
-                    output_size_per_partition=layer.output_partition_sizes[i],
-                    input_size_per_partition=layer.input_size_per_partition,
-                    bias=None,
-                )
+            out = apply_awq_marlin_linear(
+                input=x_rot,
+                weight=layer.marlin_qweight[i],
+                weight_scale=layer.marlin_scales[i],
+                weight_zp=layer.marlin_qzeros[i],
+                g_idx=layer.g_idx,
+                g_idx_sort_indices=layer.g_idx_sort_indices,
+                workspace=layer.workspace,
+                quant_type=self.quant_config.quant_type,
+                output_size_per_partition=layer.padded_partition_sizes[i],
+                input_size_per_partition=layer.input_size_per_partition,
+                bias=None,
             )
+            if layer.padded_partition_sizes[i] != layer.output_partition_sizes[i]:
+                out = out[..., :layer.output_partition_sizes[i]]
+            outputs.append(out)
 
         result = torch.cat(outputs, dim=-1)
         if bias is not None:
