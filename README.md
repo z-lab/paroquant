@@ -56,7 +56,7 @@ pip install "paroquant[agent]"
 python -m paroquant.cli.agent --model $MODEL
 ```
 
-Tool use (web fetch, filesystem, time) requires [uv](https://docs.astral.sh/uv/) and [Node.js](https://nodejs.org/en/download).
+Tool use (web fetch, filesystem, time) requires [Node.js](https://nodejs.org/en/download).
 
 ### Docker (NVIDIA GPU)
 

@@ -49,6 +49,7 @@ agent = [
     "qwen-agent",
     "mcp",
     "soundfile",
+    "uv",
 ]
 dev = [
     "pytest",
