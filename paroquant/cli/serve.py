@@ -27,6 +27,7 @@ def _serve_mlx():
 
     original_argv = list(sys.argv)
     model_arg = None
+    llm_only = False
     stripped_argv = [original_argv[0]]
     i = 1
     while i < len(original_argv):
@@ -41,6 +42,10 @@ def _serve_mlx():
             model_arg = arg.split("=", 1)[1]
             i += 1
             continue
+        if arg == "--llm-only":
+            llm_only = True
+            i += 1
+            continue
         stripped_argv.append(arg)
         i += 1
 
@@ -49,7 +54,7 @@ def _serve_mlx():
     if not model_arg:
         raise ValueError("Model path is required (use --model or MODEL environment variable).")
 
-    model, processor, is_vlm = paro_load(model_arg, force_text=False)
+    model, processor, is_vlm = paro_load(model_arg, force_text=llm_only)
 
     if is_vlm:
         import mlx_vlm.server as mlx_server
@@ -75,7 +80,7 @@ def _serve_mlx():
             tokenizer._tool_call_start = None
         if hasattr(tokenizer, "_tool_call_end"):
             tokenizer._tool_call_end = None
-        sys.argv = original_argv
+        sys.argv = stripped_argv
 
         def _patched_load(path_or_hf_repo, tokenizer_config=None, adapter_path=None, **kwargs):
             return model, tokenizer

@@ -49,6 +49,8 @@ python -m paroquant.cli.chat --model {{ paro_model_path }}
 python -m paroquant.cli.serve --model {{ paro_model_path }} --port 8000
 ```
 
+Add `--llm-only` if you do not wish to load the VLM components.
+
 {% if supports_tool_call -%}
 ### Agent with Tool Calling
 
