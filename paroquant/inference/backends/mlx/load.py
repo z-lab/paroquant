@@ -176,6 +176,8 @@ def load(model_path: str, lazy: bool = False, force_text: bool = False) -> tuple
         weights = _convert_autoawq(weights, group_size)
     if hasattr(model, "sanitize"):
         weights = model.sanitize(weights)
+    if is_vlm and hasattr(model, "vision_tower") and hasattr(model.vision_tower, "sanitize"):
+        weights = model.vision_tower.sanitize(weights)
 
     _patch_rotation_layers(model, weights, bits, group_size)
     model.load_weights(list(weights.items()), strict=False)
