@@ -25,6 +25,7 @@ transformers = [
     "torchvision",
     "transformers>=4.55",
     "autoawq",
+    "ninja",
 ]
 vllm = [
     "vllm>=0.15",
@@ -40,6 +41,7 @@ optim = [
     "datasets",
     "simple_parsing",
     "tqdm",
+    "wandb",
 ]
 eval = [
     "lm_eval",

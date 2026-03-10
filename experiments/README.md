@@ -12,7 +12,9 @@ To quantize and optimize a model with ParoQuant:
 ./experiments/optimize/4bit.sh <model> [<num_shards>]
 ```
 
-`num_shards` is 1 by default and may need to be adjusted for large models to accommodate memory constraints. Run `python3 -m paroquant.cli.optimize --help` for more details.
+`num_shards` is 1 by default and may need to be adjusted for large models to accommodate memory constraints.
+You can also increase `--gradient-accumulation-steps` to reduce peak training memory at the cost of slower optimization.
+Run `python3 -m paroquant.cli.optimize --help` for more details.
 
 We adjust the batch size, learning rate, and number of training samples for LLaMA-3-70B. Please use [`experiments/optimize/4bit_70b.sh`](./optimize/4bit_70b.sh) instead for LLaMA-3-70B.
 

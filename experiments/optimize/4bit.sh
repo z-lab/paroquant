@@ -15,6 +15,7 @@ python3 -m paroquant.cli.optimize \
     --n-bit 4 \
     --num-rotations 8 \
     --datasets wikitext2 c4 redpajama \
+    --skipped-modules "linear_attn.in_proj_a" "linear_attn.in_proj_b" \
     --val-dataset pileval \
     --train-size 2048 \
     --validation-size 64 \

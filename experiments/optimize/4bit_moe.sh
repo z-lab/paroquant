@@ -14,7 +14,7 @@ python3 -m paroquant.cli.optimize \
     --group-size 128 \
     --n-bit 4 \
     --num-rotations 8 \
-    --skipped-modules "mlp.gate" \
+    --skipped-modules "mlp.gate" "mlp.shared_expert_gate" "linear_attn.in_proj_a" "linear_attn.in_proj_b" \
     --datasets wikitext2 c4 redpajama \
     --val-dataset pileval \
     --train-size 2048 \

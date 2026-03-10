@@ -17,10 +17,11 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 def get_blocks(model: nn.Module) -> nn.ModuleList:
     model_class_name = model.__class__.__name__
     if model_class_name in (
+        "LlamaForCausalLM",
         "Qwen2ForCausalLM",
         "Qwen3ForCausalLM",
         "Qwen3MoeForCausalLM",
-        "LlamaForCausalLM",
+        "Qwen3_5ForCausalLM",
     ):
         m = model.model
     else:
@@ -71,10 +72,11 @@ def load_tokenizer(model_path: str, **kwargs) -> AutoTokenizer:
 def move_embed(model, device):
     model_class_name = model.__class__.__name__
     if model_class_name in (
+        "LlamaForCausalLM",
         "Qwen2ForCausalLM",
         "Qwen3ForCausalLM",
         "Qwen3MoeForCausalLM",
-        "LlamaForCausalLM",
+        "Qwen3_5ForCausalLM",
     ):
         model.model.embed_tokens = model.model.embed_tokens.to(device)
         model.model.rotary_emb = model.model.rotary_emb.to(device)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import random
 from collections.abc import Callable, Iterator
 from copy import deepcopy
@@ -99,13 +100,20 @@ def optimize_module(
     *,
     loss_fn: Literal["mse", "smooth_l1"],
     n_iter: int,
+    gradient_accumulation_steps: int = 1,
     early_stop: int | None,
     post_optim_callback: Callable[[nn.Module], None] | None = None,
-) -> None:
+    metric_logger: Callable[[dict[str, float], int], None] | None = None,
+    start_step: int = 0,
+) -> int:
     train_input_batches, train_output_batches = train_set_batches
     val_input_batches, val_output_batches = val_set_batches
 
-    total_steps = n_iter * len(train_input_batches)
+    if gradient_accumulation_steps <= 0:
+        raise ValueError(f"gradient_accumulation_steps must be a positive integer, got {gradient_accumulation_steps}")
+
+    num_train_batches = len(train_input_batches)
+    total_steps = n_iter * math.ceil(num_train_batches / gradient_accumulation_steps)
     schedulers = [
         CosineAnnealingParam(
             start_value=param_group["lr"],
@@ -135,7 +143,8 @@ def optimize_module(
     def loss_batches(input_batches: Iterator[torch.Tensor], output_batches: Iterator[torch.Tensor]) -> torch.Tensor:
         total_loss = None
         for input_batch, output_batch in zip(input_batches, output_batches):
-            output_q = module_output(input_batch)
+            with torch.amp.autocast("cuda"):
+                output_q = module_output(input_batch)
             loss_value = loss(output_batch, output_q)
             if total_loss is None:
                 total_loss = loss_value
@@ -148,25 +157,56 @@ def optimize_module(
 
     best_val_loss = original_val_loss
     best_sd = deepcopy(module.state_dict())
+    current_step = start_step
+    if metric_logger is not None:
+        metric_logger(
+            {
+                "val_loss": original_val_loss.item(),
+                "best_val_loss": best_val_loss.item(),
+            },
+            current_step,
+        )
 
     early_stop_counter = 0
 
     for _ in range(n_iter):
-        for input_batch, output_batch in zip(train_input_batches, train_output_batches):
-            optimizer.zero_grad()
+        optimizer.zero_grad(set_to_none=True)
+        accum_counter = 0
+        accum_loss = 0.0
+        window_size = min(gradient_accumulation_steps, num_train_batches)
+        for batch_idx, (input_batch, output_batch) in enumerate(
+            zip(train_input_batches, train_output_batches),
+            start=1,
+        ):
+            if accum_counter == 0:
+                remaining_batches = num_train_batches - batch_idx + 1
+                window_size = min(gradient_accumulation_steps, remaining_batches)
+
             with torch.amp.autocast("cuda"):
                 output_q = module_output(input_batch)
-                loss_value = loss(output_batch, output_q)
+                batch_loss = loss(output_batch, output_q)
+                loss_value = batch_loss / window_size
 
             scaler.scale(loss_value).backward()
-            scaler.step(optimizer)
-            scaler.update()
+            accum_loss += batch_loss.item()
+            accum_counter += 1
 
-            for i, scheduler in enumerate(schedulers):
-                optimizer.param_groups[i]["lr"] = scheduler.step()
+            if accum_counter == window_size:
+                scaler.step(optimizer)
+                scaler.update()
+                optimizer.zero_grad(set_to_none=True)
+                accum_counter = 0
 
-            if post_optim_callback:
-                post_optim_callback(module)
+                for i, scheduler in enumerate(schedulers):
+                    optimizer.param_groups[i]["lr"] = scheduler.step()
+
+                if post_optim_callback:
+                    post_optim_callback(module)
+
+                current_step += 1
+                if metric_logger is not None:
+                    metric_logger({"loss": accum_loss / window_size}, current_step)
+                accum_loss = 0.0
 
         with torch.no_grad():
             val_loss_value = loss_batches(val_input_batches, val_output_batches)
@@ -180,6 +220,15 @@ def optimize_module(
             if early_stop is not None and early_stop_counter >= early_stop:
                 break
 
+        if metric_logger is not None:
+            metric_logger(
+                {
+                    "val_loss": val_loss_value.item(),
+                    "best_val_loss": best_val_loss.item(),
+                },
+                current_step,
+            )
+
         progress_bar.set_postfix(
             val_loss=val_loss_value.item(),
             val_og_loss=original_val_loss.item(),
@@ -190,3 +239,4 @@ def optimize_module(
     logger.info(f"Best val loss: {best_val_loss.item()}, Original val loss: {original_val_loss.item()}")
 
     module.load_state_dict(best_sd)
+    return current_step

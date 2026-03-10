@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
@@ -9,6 +10,7 @@ import simple_parsing
 import torch
 import torch.nn as nn
 from tqdm import tqdm
+import wandb
 
 from paroquant.optim.train import (
     optimize_module,
@@ -69,6 +71,9 @@ class Config:
     validation_size: int
     batch_size: int
     val_batch_size: int | None = None
+    # Accumulate gradients over multiple micro-batches before each optimizer step.
+    # Increasing this reduces peak memory usage but increases training time.
+    gradient_accumulation_steps: int = 1
     seqlen: int
 
     # Number of shards to cache the input/output tensors. At any time, only one shard
@@ -86,6 +91,19 @@ class Config:
 
     seed: int
 
+    use_wandb: bool = False
+
+
+def setup_wandb(args: Config) -> wandb.Run | None:
+    if not args.use_wandb:
+        return None
+    wandb_run = wandb.init(config=vars(args))
+    logger.info(
+        f"wandb logging enabled: entity={wandb_run.entity}, project={wandb_run.project}, run_name={wandb_run.name}"
+    )
+
+    return wandb_run
+
 
 def main():
     args = simple_parsing.parse(Config, add_option_string_dash_variants=simple_parsing.DashVariant.DASH)
@@ -99,6 +117,8 @@ def main():
 
     # Currently only support single GPU training.
     device = "cuda"
+
+    wandb_run = setup_wandb(args)
 
     # Determine which params to optimize.
     params_to_optimize: list[dict[str, float]] = []
@@ -292,6 +312,25 @@ def main():
             layer.to(device).float()
 
             set_checkpointing_enabled(layer, args.checkpointing)
+            layer_step = 0
+            wandb_metric_logger = None
+            if wandb_run is not None:
+                layer_prefix = f"layer_{layer_idx}"
+                layer_step_metric = f"{layer_prefix}/step"
+                wandb.define_metric(layer_step_metric)
+                wandb.define_metric(f"{layer_prefix}/loss", step_metric=layer_step_metric)
+                wandb.define_metric(f"{layer_prefix}/val_loss", step_metric=layer_step_metric)
+                wandb.define_metric(f"{layer_prefix}/best_val_loss", step_metric=layer_step_metric)
+
+                def _wandb_layer_logger(
+                    metrics: dict[str, float], metric_step: int, *, _prefix=layer_prefix, _step_metric=layer_step_metric
+                ) -> None:
+                    payload = {_step_metric: metric_step}
+                    payload.update({f"{_prefix}/{metric_name}": value for metric_name, value in metrics.items()})
+                    wandb_run.log(payload)
+
+                wandb_metric_logger = _wandb_layer_logger
+
             for step, step_params_dict in enumerate(params_to_optimize):
                 empty_cache()
                 optim_params = []
@@ -316,7 +355,7 @@ def main():
                     f"{', '.join([k for k in step_params_dict])}"
                 )
 
-                optimize_module(
+                layer_step = optimize_module(
                     layer,
                     (train_input_batches, train_output_batches),
                     (val_input_batches, val_output_batches),
@@ -324,8 +363,11 @@ def main():
                     optim_params,
                     loss_fn=args.loss,
                     n_iter=args.epochs[step],
+                    gradient_accumulation_steps=args.gradient_accumulation_steps,
                     early_stop=None,
                     post_optim_callback=reset_angles_by_mask,
+                    metric_logger=wandb_metric_logger,
+                    start_step=layer_step,
                 )
 
             set_checkpointing_enabled(layer, False)
@@ -373,6 +415,9 @@ def main():
             )
 
         layer.cpu()
+
+    if wandb_run is not None:
+        wandb_run.finish()
 
 
 if __name__ == "__main__":
