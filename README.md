@@ -127,6 +127,51 @@ python -m paroquant.cli.convert \
   --output-path models/Qwen3-8B-PARO
 ```
 
+## Export For LM Studio And Ollama
+
+Use the export CLI to convert ParoQuant checkpoints into runtime-compatible artifacts:
+
+- HF dense checkpoint (`hf-fp16`)
+- MLX package (`mlx`) for Apple Silicon / LM Studio MLX runtime
+- GGUF files (`gguf`) for Ollama and LM Studio fallback
+- `Modelfile` (`ollama`) and `model.yaml` (`lmstudio`)
+- `manifest.json` with generated artifacts and hashes
+
+### M1 Lightweight Flow (scaffold + local checks)
+
+```bash
+pip install -e ".[export,dev]"
+
+python -m paroquant.cli.export \
+  --model z-lab/Qwen3.5-9B-PARO \
+  --output-dir output/qwen3.5-9b-export \
+  --targets hf \
+  --text-only
+```
+
+### M2 Ultra Full Flow (MLX + GGUF + Ollama + LM Studio)
+
+```bash
+pip install -e ".[export,mlx]"
+
+# Build llama.cpp first (outside this repo) and pass its path.
+python -m paroquant.cli.export \
+  --model z-lab/Qwen3.5-9B-PARO \
+  --output-dir output/qwen3.5-9b-export \
+  --targets hf,mlx,gguf,ollama,lmstudio \
+  --text-only \
+  --gguf-quants Q4_K_M,Q8_0 \
+  --llama-cpp-dir /path/to/llama.cpp
+```
+
+### Ollama Usage
+
+```bash
+cd output/qwen3.5-9b-export/ollama
+ollama create qwen35-paro -f Modelfile
+ollama run qwen35-paro
+```
+
 ## Docker Images
 
 | Image | Purpose |

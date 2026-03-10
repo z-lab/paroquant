@@ -4,14 +4,19 @@ import argparse
 import json
 from pathlib import Path
 
-from paroquant.export import DEFAULT_GGUF_QUANTS, DEFAULT_TARGETS, ExportOptions, run_export
+from paroquant.export import DEFAULT_GGUF_QUANTS, DEFAULT_TARGETS, VALID_TARGETS, ExportOptions, run_export
 
 
-def _csv_to_tuple(raw: str) -> tuple[str, ...]:
+def _csv_to_tuple(raw: str, *, allowed: set[str] | frozenset[str] | None = None) -> tuple[str, ...]:
     values = [x.strip() for x in raw.split(",") if x.strip()]
     if not values:
         raise ValueError("Expected at least one comma-separated value.")
-    return tuple(values)
+    deduped = tuple(dict.fromkeys(values))
+    if allowed is not None:
+        invalid = [v for v in deduped if v not in allowed]
+        if invalid:
+            raise ValueError(f"Invalid values: {invalid}. Allowed: {sorted(allowed)}")
+    return deduped
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -52,12 +57,18 @@ def main() -> None:
     parser = _build_parser()
     args = parser.parse_args()
 
+    try:
+        targets = _csv_to_tuple(args.targets, allowed=VALID_TARGETS)
+        gguf_quants = _csv_to_tuple(args.gguf_quants)
+    except ValueError as exc:
+        parser.error(str(exc))
+
     opts = ExportOptions(
         model=args.model,
         output_dir=args.output_dir,
-        targets=_csv_to_tuple(args.targets),
+        targets=targets,
         text_only=args.text_only,
-        gguf_quants=_csv_to_tuple(args.gguf_quants),
+        gguf_quants=gguf_quants,
         llama_cpp_dir=args.llama_cpp_dir,
         hf_publish_layout=args.hf_publish_layout,
         mlx_q_bits=args.mlx_q_bits,

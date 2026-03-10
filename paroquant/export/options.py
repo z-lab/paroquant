@@ -5,6 +5,7 @@ from pathlib import Path
 
 DEFAULT_TARGETS = ("hf", "mlx", "gguf", "ollama", "lmstudio")
 DEFAULT_GGUF_QUANTS = ("Q4_K_M", "Q8_0")
+VALID_TARGETS = frozenset(DEFAULT_TARGETS)
 
 
 @dataclass(frozen=True)

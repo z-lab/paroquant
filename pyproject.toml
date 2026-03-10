@@ -35,6 +35,12 @@ mlx = [
     "mlx-lm",
     "mlx-vlm",
 ]
+export = [
+    "torch>=2.8",
+    "transformers>=4.55",
+    "safetensors",
+    "huggingface_hub",
+]
 optim = [
     "paroquant[transformers]",
     "datasets",

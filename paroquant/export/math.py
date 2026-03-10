@@ -54,7 +54,7 @@ def fuse_inverse_rotations(
     Given y = rotate(x, pairs, theta, channel_scales) @ W^T, produce W_eff such that
     y = x @ W_eff^T by applying inverse rotations in reverse order and channel scales.
     """
-    w = weight.to(torch.float32)
+    w = weight.to(torch.float32).clone()
     out_features, in_features = w.shape
 
     if in_features % group_size != 0:
