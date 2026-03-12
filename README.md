@@ -22,8 +22,13 @@ State-of-the-art INT4 quantization for LLMs. ParoQuant uses learned pairwise rot
 ### Installation
 
 ```bash
-# NVIDIA GPU
+# NVIDIA GPU (CUDA 12.9)
 pip install "paroquant[vllm]"
+
+# NVIDIA GPU (CUDA 13.0)
+pip install "paroquant[vllm] vllm==0.17.1" \
+  --extra-index-url https://wheels.vllm.ai/0.17.1/cu130 \
+  --extra-index-url https://download.pytorch.org/whl/cu130
 
 # Apple Silicon
 pip install "paroquant[mlx]"
@@ -62,13 +67,18 @@ Tool use (web fetch, filesystem, time) requires [Node.js](https://nodejs.org/en/
 
 ### Docker (NVIDIA GPU)
 
+> [!NOTE]
+> The following commands map the local cache directory to the container in order to persist kernel cache across runs. Remove `-v ...` to disable this behaviour.
+
 ```bash
 # Interactive chat
 docker run --pull=always --rm -it --gpus all --ipc=host \
+  -v $HOME/.cache/paroquant:/root/.cache/paroquant \
   ghcr.io/z-lab/paroquant:chat --model $MODEL
 
 # API server (port 8000)
 docker run --pull=always --rm -it --gpus all --ipc=host -p 8000:8000 \
+  -v $HOME/.cache/paroquant:/root/.cache/paroquant \
   ghcr.io/z-lab/paroquant:serve --model $MODEL
 ```
 
