@@ -96,10 +96,12 @@ torch::Tensor rotate_launcher(at::Tensor x, at::Tensor idx_ij, at::Tensor theta,
 
 #undef LAUNCH_ROTATE
 
-// We only compile KROT=8 for now to speedup compilation.
+// We only compile KROT=1/8 for now to speedup compilation.
 // Please manually add more cases if needed.
 #define DISPATCH_KROT(GS)                                                                          \
   switch (krot) {                                                                                  \
+  case 1:                                                                                          \
+    return rotate_launcher<1, 4, GS>(x, idx, theta, scales);                                       \
   case 8:                                                                                          \
     return rotate_launcher<8, 4, GS>(x, idx, theta, scales);                                       \
   default:                                                                                         \
