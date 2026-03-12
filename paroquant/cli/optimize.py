@@ -278,7 +278,7 @@ def main():
                 group_size=args.group_size,
                 num_rotations=args.num_rotations,
                 num_pairs_factor=num_pairs_factor,
-                seed=args.seed + layer_idx,
+                seed=args.seed + layer_idx + hash(name),
             )
 
             all_pairs = [torch.tensor(pairs, device="cpu", dtype=torch.int32) for pairs in all_pairs]
