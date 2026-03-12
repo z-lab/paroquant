@@ -96,18 +96,12 @@ torch::Tensor rotate_launcher(at::Tensor x, at::Tensor idx_ij, at::Tensor theta,
 
 #undef LAUNCH_ROTATE
 
+// We only compile KROT=8 for now to speedup compilation.
+// Please manually add more cases if needed.
 #define DISPATCH_KROT(GS)                                                                          \
   switch (krot) {                                                                                  \
-  case 1:                                                                                          \
-    return rotate_launcher<1, 4, GS>(x, idx, theta, scales);                                       \
-  case 2:                                                                                          \
-    return rotate_launcher<2, 4, GS>(x, idx, theta, scales);                                       \
-  case 4:                                                                                          \
-    return rotate_launcher<4, 4, GS>(x, idx, theta, scales);                                       \
   case 8:                                                                                          \
     return rotate_launcher<8, 4, GS>(x, idx, theta, scales);                                       \
-  case 16:                                                                                         \
-    return rotate_launcher<16, 4, GS>(x, idx, theta, scales);                                      \
   default:                                                                                         \
     TORCH_CHECK(false, "Unsupported KROT = ", krot, "; compiled variants: 1/2/4/8/16");            \
   }
@@ -121,9 +115,10 @@ torch::Tensor rotate_dynamic(at::Tensor x, at::Tensor idx, at::Tensor theta,
   if (group_size == 128) {
     DISPATCH_KROT(128)
   }
-  if (group_size == 64) {
-    DISPATCH_KROT(64)
-  }
+  // We also drop support for group_size=64 here to speed up compilation.
+  // if (group_size == 64) {
+  //   DISPATCH_KROT(64)
+  // }
   TORCH_CHECK(false, "Unsupported group_size: ", group_size, "; expected 64 or 128");
 }
 
