@@ -13,6 +13,10 @@ def _serve_vllm():
         run_server,
     )
 
+    print(
+        "Note: The first run takes more time to load the model due to kernel compilation. The subsequent runs will be faster."
+    )
+
     import paroquant.inference.backends.vllm.plugin  # noqa: F401
 
     args = make_arg_parser(FlexibleArgumentParser()).parse_args(sys.argv[1:])

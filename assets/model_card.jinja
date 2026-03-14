@@ -3,7 +3,7 @@
 
 ---
 library_name: transformers
-license: apache-2.0
+license: {{ license }}
 {% if pipeline_tag -%} pipeline_tag: {{ pipeline_tag }} {%- endif %}
 base_model:
 - {{ base_model }}
@@ -20,9 +20,9 @@ base_model:
   <a href="https://pypi.org/project/paroquant/"><img src="https://img.shields.io/pypi/v/paroquant" alt="PyPI"></a>
 </p>
 
-ParoQuant is the state-of-the-art INT4 quantization for LLMs. It closes the accuracy gap with FP16 while running at near-AWQ speed. Supports NVIDIA GPUs (vLLM, Transformers) and Apple Silicon (MLX).
+ParoQuant is the state-of-the-art INT4 quantization for LLMs. It closes the accuracy gap with FP16 while running at near-AWQ speed. Supports NVIDIA GPUs (vLLM, Transformers) and Apple Silicon (MLX). For more information, see https://github.com/z-lab/paroquant.
 
-[`{{ paro_model_path }}`](https://huggingface.co/{{ paro_model_path }}) is a 4-bit [`{{ base_model }}`](https://huggingface.co/{{ base_model }}) quantized with [ParoQuant](https://github.com/z-lab/paroquant). Check out other ParoQuant models from the Hugging Face [collection](https://huggingface.co/collections/z-lab/paroquant). Swap the model name in the commands below to try any of them.
+{{ paro_model_path }} is a 4-bit [{{ base_model }}](https://huggingface.co/{{ base_model }}) quantized with ParoQuant. Check out other ParoQuant models from the Hugging Face [collection](https://huggingface.co/collections/z-lab/paroquant).
 
 
 ## Quick Start
@@ -30,8 +30,13 @@ ParoQuant is the state-of-the-art INT4 quantization for LLMs. It closes the accu
 ### Installation
 
 ```bash
-# NVIDIA GPU
+# NVIDIA GPU (CUDA 12.9)
 pip install "paroquant[vllm]"
+
+# NVIDIA GPU (CUDA 13.0)
+pip install "paroquant[vllm] vllm==0.17.1" \
+  --extra-index-url https://wheels.vllm.ai/0.17.1/cu130 \
+  --extra-index-url https://download.pytorch.org/whl/cu130
 
 # Apple Silicon
 pip install "paroquant[mlx]"
@@ -66,13 +71,18 @@ Tool use (web fetch, filesystem, time) requires [Node.js](https://nodejs.org/en/
 
 ### Docker (NVIDIA GPU)
 
+> [!NOTE]
+> The following commands map the local cache directory to the container in order to persist kernel cache across runs. Remove `-v ...` to disable this behaviour.
+
 ```bash
 # Interactive chat
 docker run --pull=always --rm -it --gpus all --ipc=host \
+  -v $HOME/.cache/paroquant:/root/.cache/paroquant \
   ghcr.io/z-lab/paroquant:chat --model {{ paro_model_path }}
 
 # API server (port 8000)
 docker run --pull=always --rm -it --gpus all --ipc=host -p 8000:8000 \
+  -v $HOME/.cache/paroquant:/root/.cache/paroquant \
   ghcr.io/z-lab/paroquant:serve --model {{ paro_model_path }}
 ```
 

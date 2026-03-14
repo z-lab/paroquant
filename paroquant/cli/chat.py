@@ -146,6 +146,10 @@ async def run_chat_app(model: str, backend: str, params: GenerationParams):
     backend = detect_backend() if backend == "auto" else backend
 
     console.print(f"[hint]Loading model ({backend})...[/hint]")
+    if backend == "vllm":
+        console.print(
+            "[hint]Note: The first run takes more time to load the model due to kernel compilation. The subsequent runs will be faster.[/hint]"
+        )
     generator = create_generator(backend, model)
 
     console.print("[hint]Warming up...[/hint]")
