@@ -94,6 +94,7 @@ All models are available on [Hugging Face](https://huggingface.co/collections/z-
 | Qwen3.5-2B | [`z-lab/Qwen3.5-2B-PARO`](https://huggingface.co/z-lab/Qwen3.5-2B-PARO) |
 | Qwen3.5-4B | [`z-lab/Qwen3.5-4B-PARO`](https://huggingface.co/z-lab/Qwen3.5-4B-PARO) |
 | Qwen3.5-9B | [`z-lab/Qwen3.5-9B-PARO`](https://huggingface.co/z-lab/Qwen3.5-9B-PARO) |
+| Qwen3.5-27B | [`z-lab/Qwen3.5-27B-PARO`](https://huggingface.co/z-lab/Qwen3.5-27B-PARO) |
 
 **Qwen3**
 
