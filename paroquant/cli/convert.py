@@ -1,18 +1,105 @@
 from __future__ import annotations
 
 import json
+import shutil
+from contextlib import suppress
 from argparse import ArgumentParser
 from pathlib import Path
 from typing import Any
 
 import torch
 from tqdm import tqdm
-from transformers import AutoModelForCausalLM, AutoModelForImageTextToText, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoModelForImageTextToText
 
 from paroquant.optim.util import get_named_linears, set_module_by_name
 
 _AWQ_REORDER = (0, 2, 4, 6, 1, 3, 5, 7)
 _LAYER_PATHS = ["model.layers", "model.language_model.layers", "language_model.layers"]
+
+
+def _resolve_source_dir(model_id: str) -> Path:
+    model_path = Path(model_id).expanduser()
+    if model_path.is_dir():
+        return model_path
+
+    from huggingface_hub import snapshot_download
+
+    return Path(snapshot_download(repo_id=model_id, repo_type="model"))
+
+
+def _is_markdown(path: Path) -> bool:
+    return path.suffix.lower() in {".md", ".mdx", ".markdown"}
+
+
+def _is_safetensor_related(path: Path) -> bool:
+    return path.suffix == ".safetensors" or path.name.endswith(".safetensors.index.json")
+
+
+def _copy_file(src: Path, dst: Path) -> None:
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(src, dst)
+
+
+def _copy_source_non_md_files(
+    source_dir: Path,
+    output_dir: Path,
+    keep_config: bool = False,
+) -> set[Path]:
+    copied: set[Path] = set()
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    for src in source_dir.rglob("*"):
+        if not src.is_file():
+            continue
+        if _is_markdown(src) or _is_safetensor_related(src):
+            continue
+        if not keep_config and src.name == "config.json":
+            continue
+        rel = src.relative_to(source_dir)
+        _copy_file(src, output_dir / rel)
+        copied.add(rel)
+
+    return copied
+
+
+def _remove_safetensor_files(output_dir: Path) -> None:
+    for existing in output_dir.rglob("*"):
+        if existing.is_file() and _is_safetensor_related(existing):
+            with suppress(FileNotFoundError):
+                existing.unlink()
+
+
+def _prune_non_md_extras(output_dir: Path, source_non_md_files: set[Path]) -> None:
+    for existing in output_dir.rglob("*"):
+        if not existing.is_file():
+            continue
+        if _is_markdown(existing) or _is_safetensor_related(existing) or existing.name == "config.json":
+            continue
+        rel = existing.relative_to(output_dir)
+        if rel not in source_non_md_files:
+            with suppress(FileNotFoundError):
+                existing.unlink()
+
+
+def _write_config_json(
+    source_dir: Path,
+    output_dir: Path,
+    quant_config: dict[str, Any] | None,
+) -> None:
+    output_cfg = output_dir / "config.json"
+
+    source_cfg = source_dir / "config.json"
+    if source_cfg.exists():
+        config = json.loads(source_cfg.read_text())
+    elif output_cfg.exists():
+        config = json.loads(output_cfg.read_text())
+    else:
+        raise FileNotFoundError(f"config.json not found in {source_dir} or {output_dir}")
+
+    if quant_config is not None:
+        config["quantization_config"] = quant_config
+
+    output_cfg.write_text(json.dumps(config, indent=2) + "\n")
 
 
 def _load_model(model_id: str, device_map: str = "cpu") -> torch.nn.Module:
@@ -193,26 +280,32 @@ def main() -> None:
     if not result_dir.is_dir():
         raise FileNotFoundError(f"Result directory not found: {result_dir}")
 
-    model = _load_model(args.model, device_map="cpu" if args.mode == "real" else "cuda")
+    source_dir = _resolve_source_dir(args.model)
+    model = _load_model(str(source_dir), device_map="cpu" if args.mode == "real" else "cuda")
 
+    quant_config: dict[str, Any] | None = None
     if args.mode == "pseudo":
         count = _convert_pseudo(model, result_dir)
     else:
         count, quant_config = _convert_real(model, result_dir)
-        args_json = result_dir / "args.json"
-        if args_json.exists():
-            skipped = json.loads(args_json.read_text()).get("skipped_modules", [])
-            if skipped:
-                quant_config["modules_to_not_convert"] = skipped
         model.config.quantization_config = quant_config
 
     if count == 0:
         raise RuntimeError(f"No checkpoint files matched in {result_dir}")
 
     output_path = Path(args.output_path)
-    output_path.mkdir(parents=True, exist_ok=True)
-    model.save_pretrained(output_path)
-    AutoTokenizer.from_pretrained(args.model).save_pretrained(output_path)
+    source_non_md = _copy_source_non_md_files(source_dir, output_path)
+    _remove_safetensor_files(output_path)
+
+    model.save_pretrained(output_path, safe_serialization=True)
+
+    # Restore original non-MD assets in case save_pretrained overwrote any.
+    source_non_md = _copy_source_non_md_files(source_dir, output_path)
+    _prune_non_md_extras(output_path, source_non_md)
+    _write_config_json(source_dir, output_path, quant_config)
+
+    if not any(_is_safetensor_related(p) for p in output_path.rglob("*") if p.is_file()):
+        raise RuntimeError("No safetensors artifacts were generated.")
 
     print(f"Converted {count} layers ({args.mode}) → {output_path}")
 
