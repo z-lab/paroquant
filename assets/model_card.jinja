@@ -20,7 +20,7 @@ base_model:
   <a href="https://pypi.org/project/paroquant/"><img src="https://img.shields.io/pypi/v/paroquant" alt="PyPI"></a>
 </p>
 
-ParoQuant is the state-of-the-art INT4 quantization for LLMs. It closes the accuracy gap with FP16 while running at near-AWQ speed. Supports NVIDIA GPUs (vLLM, Transformers) and Apple Silicon (MLX).
+ParoQuant is the state-of-the-art INT4 quantization for LLMs. It closes the accuracy gap with FP16 while running at near-AWQ speed. Supports NVIDIA GPUs (vLLM, Transformers) and Apple Silicon (MLX). For more information, see https://github.com/z-lab/paroquant.
 
 {{ paro_model_path }} is a 4-bit [{{ base_model }}](https://huggingface.co/{{ base_model }}) quantized with ParoQuant. Check out other ParoQuant models from the Hugging Face [collection](https://huggingface.co/collections/z-lab/paroquant).
 
@@ -47,8 +47,6 @@ pip install "paroquant[mlx]"
 ```bash
 python -m paroquant.cli.chat --model {{ paro_model_path }}
 ```
-
-Add `--llm-only` if you do not wish to load the VLM components.
 
 ### OpenAI-Compatible API Server
 
