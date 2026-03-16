@@ -12,17 +12,9 @@ import wandb
 from tqdm import tqdm
 from transformers.models.qwen3_5_moe.modeling_qwen3_5_moe import Qwen3_5MoeExperts
 
-from paroquant.optim.train import (
-    optimize_module,
-    get_random_rotation_pairs,
-)
-from paroquant.optim.qlinear import (
-    PseudoQuantizedLinear,
-)
-from paroquant.optim.moe import (
-    PseudoQuantizedQwen3_5MoeExperts,
-    get_named_qwen3_5_moe_experts,
-)
+from paroquant.optim.train import optimize_module, get_random_rotation_pairs
+from paroquant.optim.qlinear import PseudoQuantizedLinear
+from paroquant.optim.qexperts import PseudoQuantizedQwen3_5MoeExperts, get_named_qwen3_5_moe_experts
 from paroquant.optim.util import (
     set_module_by_name,
     load_model,
