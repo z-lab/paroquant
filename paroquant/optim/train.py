@@ -143,8 +143,8 @@ def optimize_module(
     def loss_batches(input_batches: Iterator[torch.Tensor], output_batches: Iterator[torch.Tensor]) -> torch.Tensor:
         total_loss = None
         for input_batch, output_batch in zip(input_batches, output_batches):
-            with torch.amp.autocast("cuda"):
-                output_q = module_output(input_batch)
+            # with torch.amp.autocast("cuda"):
+            output_q = module_output(input_batch)
             loss_value = loss(output_batch, output_q)
             if total_loss is None:
                 total_loss = loss_value
@@ -152,7 +152,7 @@ def optimize_module(
                 total_loss += loss_value
         return total_loss / len(input_batches)
 
-    with torch.no_grad():
+    with torch.no_grad(), torch.amp.autocast("cuda"):
         original_val_loss = loss_batches(val_input_batches, val_output_batches)
 
     best_val_loss = original_val_loss
@@ -208,7 +208,7 @@ def optimize_module(
                     metric_logger({"loss": accum_loss / window_size}, current_step)
                 accum_loss = 0.0
 
-        with torch.no_grad():
+        with torch.no_grad(), torch.amp.autocast("cuda"):
             val_loss_value = loss_batches(val_input_batches, val_output_batches)
 
         if val_loss_value < best_val_loss:
