@@ -14,7 +14,7 @@ class MlxGenerator(BaseGenerator):
     backend = "mlx"
 
     def __init__(self, model: str):
-        self.model, self.processor, self.is_vlm = load(model)
+        self.model, self.processor, self.is_vlm = load(model, force_text=True)
         self.tokenizer = getattr(self.processor, "tokenizer", self.processor)
 
     async def stream_generate(self, prompt: str, params: GenerationParams) -> AsyncIterator[str]:
