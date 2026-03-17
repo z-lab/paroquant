@@ -15,19 +15,9 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
 def get_blocks(model: nn.Module) -> nn.ModuleList:
-    model_class_name = model.__class__.__name__
-    if model_class_name in (
-        "LlamaForCausalLM",
-        "Qwen2ForCausalLM",
-        "Qwen3ForCausalLM",
-        "Qwen3MoeForCausalLM",
-        "Qwen3_5ForCausalLM",
-    ):
-        m = model.model
-    else:
-        raise NotImplementedError(type(model))
-
-    return m.layers
+    if hasattr(model, "model") and hasattr(model.model, "layers"):
+        return model.model.layers
+    raise NotImplementedError(type(model))
 
 
 _Linear_T = TypeVar("Linear", bound=nn.Module)
@@ -70,15 +60,12 @@ def load_tokenizer(model_path: str, **kwargs) -> AutoTokenizer:
 
 
 def move_embed(model, device):
-    model_class_name = model.__class__.__name__
-    if model_class_name in (
-        "LlamaForCausalLM",
-        "Qwen2ForCausalLM",
-        "Qwen3ForCausalLM",
-        "Qwen3MoeForCausalLM",
-        "Qwen3_5ForCausalLM",
-    ):
+    if hasattr(model, "model") and hasattr(model.model, "embed_tokens"):
         model.model.embed_tokens = model.model.embed_tokens.to(device)
+    else:
+        raise NotImplementedError(type(model))
+
+    if hasattr(model, "model") and hasattr(model.model, "rotary_emb"):
         model.model.rotary_emb = model.model.rotary_emb.to(device)
     else:
         raise NotImplementedError(type(model))
