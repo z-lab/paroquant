@@ -56,17 +56,6 @@ For vLLM, the arguments are passed to vLLM directly. See [vLLM docs](https://doc
 
 For MLX, add `--vlm` if you wish to load the VLM components and use the model's multimodal features. For vLLM, VLM components are loaded by default and can be skipped with the server argument `--language-model-only`.
 
-### Agent with Tool Calling
-
-Start the API server first, then install the agent dependencies and run:
-
-```bash
-pip install "paroquant[agent]"
-python -m paroquant.cli.agent --model $MODEL
-```
-
-Tool use (web fetch, filesystem, time) requires [Node.js](https://nodejs.org/en/download).
-
 ### Docker (NVIDIA GPU)
 
 > [!NOTE]

@@ -85,10 +85,6 @@ def _serve_mlx():
         import mlx_lm.server as mlx_server
 
         tokenizer = getattr(processor, "tokenizer", processor)
-        if hasattr(tokenizer, "_tool_call_start"):
-            tokenizer._tool_call_start = None
-        if hasattr(tokenizer, "_tool_call_end"):
-            tokenizer._tool_call_end = None
         sys.argv = stripped_argv
 
         def _patched_load(path_or_hf_repo, tokenizer_config=None, adapter_path=None, **kwargs):

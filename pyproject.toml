@@ -1,6 +1,6 @@
 [project]
 name = "paroquant"
-version = "0.1.9"
+version = "0.1.10"
 requires-python = ">=3.11"
 description = "ParoQuant — Pairwise Rotation Quantization for LLMs"
 readme = "README.md"
