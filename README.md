@@ -26,7 +26,7 @@ State-of-the-art INT4 quantization for LLMs. ParoQuant uses learned pairwise rot
 pip install "paroquant[vllm]"
 
 # NVIDIA GPU (CUDA 13.0)
-pip install "paroquant[vllm] vllm==0.17.1" \
+pip install "paroquant[vllm]" "vllm==0.17.1" \
   --extra-index-url https://wheels.vllm.ai/0.17.1/cu130 \
   --extra-index-url https://download.pytorch.org/whl/cu130
 
