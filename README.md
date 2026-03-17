@@ -52,7 +52,9 @@ python -m paroquant.cli.chat --model $MODEL
 python -m paroquant.cli.serve --model $MODEL --port 8000
 ```
 
-Add `--llm-only` if you do not wish to load the VLM components.
+For vLLM, the arguments are passed to vLLM directly. See [vLLM docs](https://docs.vllm.ai/en/latest/configuration/serve_args/) for more details.
+
+For MLX, add `--vlm` if you wish to load the VLM components and use the model's multimodal features. For vLLM, VLM components are loaded by default and can be skipped with the server argument `--language-model-only`.
 
 ### Agent with Tool Calling
 
