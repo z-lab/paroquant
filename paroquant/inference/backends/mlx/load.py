@@ -13,7 +13,6 @@ from .modules import RotateQuantizedLinear, RotateQuantizedSwitchLinear
 logger = logging.getLogger(__name__)
 
 _BITS = 4
-_PF = 32 // _BITS
 _MASK = (1 << _BITS) - 1
 _SHIFTS = np.arange(0, 32, _BITS, dtype=np.int64)
 _INV_REORDER = np.array([0, 4, 1, 5, 2, 6, 3, 7])
@@ -48,9 +47,9 @@ def _convert_awq_linear(weights: dict, prefix: str, group_size: int) -> dict:
     """Convert one AutoAWQ linear layer (qweight/scales/qzeros) → MLX (weight/scales/biases)."""
     qw = np.array(weights[f"{prefix}qweight"])
     weight = mx.array(_pack_mlx(_unpack_and_reorder(qw).T))
-    scales = mx.array(np.array(weights[f"{prefix}scales"]).T.copy())
-    zeros = _unpack_and_reorder(np.array(weights[f"{prefix}qzeros"])).astype(np.float32)
     scales_np = np.array(weights[f"{prefix}scales"]).astype(np.float32)
+    scales = mx.array(scales_np.T.copy())
+    zeros = _unpack_and_reorder(np.array(weights[f"{prefix}qzeros"])).astype(np.float32)
     biases = mx.array((-scales_np * zeros).T.copy().astype(np.float16))
     return {"weight": weight, "scales": scales, "biases": biases}
 
@@ -75,10 +74,10 @@ def _convert_autoawq(weights: dict, group_size: int) -> dict:
                 out[f"{pfx}{k}"] = v
         elif suffix in ("qzeros", "scales"):
             pass  # consumed by qweight branch
-        elif suffix in ("theta", "pairs", "bias"):
-            out[key] = val
         elif suffix == "channel_scales":
             out[key] = val.reshape(1, -1) if val.ndim == 1 else val
+        else:
+            out[key] = val
 
     return out
 
