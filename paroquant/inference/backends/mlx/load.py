@@ -67,7 +67,7 @@ def _convert_autoawq(weights: dict, group_size: int) -> dict:
             out[key] = val
             continue
 
-        suffix = key[len(pfx):]
+        suffix = key[len(pfx) :]
         if suffix == "qweight":
             converted = _convert_awq_linear(weights, pfx, group_size)
             for k, v in converted.items():
@@ -97,7 +97,7 @@ def _convert_paro_native(weights: dict, group_size: int, bits: int = _BITS) -> d
             out[key] = val
             continue
 
-        rel = key[len(pfx) + 1:]
+        rel = key[len(pfx) + 1 :]
 
         if rel == "qlinear.qweight":
             raw = _unpack_int16_nibbles(np.array(val), bits)
@@ -221,6 +221,7 @@ def _patch_quantized_layers(model, weights: dict, bits: int, group_size: int):
     """
     try:
         from mlx_lm.models.switch_layers import SwitchLinear, QuantizedSwitchLinear
+
         _has_switch = True
     except ImportError:
         _has_switch = False
@@ -231,15 +232,19 @@ def _patch_quantized_layers(model, weights: dict, bits: int, group_size: int):
         theta = theta_keys[prefix]
         if _has_switch and theta.ndim == 3:
             num_experts, krot, half_dim = theta.shape
-            _set_module(model, prefix, RotateQuantizedSwitchLinear(
-                input_dims=half_dim * 2,
-                output_dims=_get_module(model, prefix).output_dims,
-                num_experts=num_experts,
-                bias=False,
-                group_size=group_size,
-                bits=bits,
-                krot=krot,
-            ))
+            _set_module(
+                model,
+                prefix,
+                RotateQuantizedSwitchLinear(
+                    input_dims=half_dim * 2,
+                    output_dims=_get_module(model, prefix).output_dims,
+                    num_experts=num_experts,
+                    bias=False,
+                    group_size=group_size,
+                    bits=bits,
+                    krot=krot,
+                ),
+            )
         else:
             original = _get_module(model, prefix)
             _set_module(
@@ -261,10 +266,18 @@ def _patch_quantized_layers(model, weights: dict, bits: int, group_size: int):
                 continue
             w = weights.get(f"{path}.weight")
             if w is not None and w.dtype in (mx.uint32, mx.uint16, mx.uint8):
-                _set_module(model, path, QuantizedSwitchLinear(
-                    mod.input_dims, mod.output_dims, mod.num_experts,
-                    bias="bias" in mod, group_size=group_size, bits=bits,
-                ))
+                _set_module(
+                    model,
+                    path,
+                    QuantizedSwitchLinear(
+                        mod.input_dims,
+                        mod.output_dims,
+                        mod.num_experts,
+                        bias="bias" in mod,
+                        group_size=group_size,
+                        bits=bits,
+                    ),
+                )
 
 
 def _is_io_layer(path, module):
