@@ -69,6 +69,7 @@ class RotateQuantizedLinear(nn.Module):
         if bias:
             self.bias = mx.zeros((output_dims,))
 
+        self._force_eval = False
         self._cached = False
 
     def _cache_rotation(self):
@@ -109,137 +110,106 @@ class RotateQuantizedLinear(nn.Module):
         )
         if "bias" in self:
             y = y + self.bias
+        if self._force_eval:
+            mx.eval(y)
         return y
 
 
-class RotateQuantizedSwitchLinear(nn.Module):
-    """Per-expert pairwise Givens rotation + quantized gather matmul for MoE.
+class _CachedRotation:
+    """Mixin-style helper that pre-computes sin/cos and packs pairs for a single rotation."""
 
-    Drop-in replacement for ``SwitchLinear`` / ``QuantizedSwitchLinear`` inside
-    a ``SwitchGLU`` block.  Each expert carries its own rotation parameters
-    (theta, pairs, channel_scales) and INT4 weights.
+    def _init_rotation(self, krot: int, dim: int, group_size: int, prefix: str = ""):
+        pfx = f"{prefix}_" if prefix else ""
+        setattr(self, f"{pfx}theta", mx.zeros((krot, dim // 2)))
+        setattr(self, f"{pfx}pairs", mx.zeros((krot, dim), dtype=mx.int16))
+        setattr(self, f"{pfx}channel_scales", mx.ones((1, dim)))
+        self._rot_group_size = group_size
+
+    def _cache_single_rotation(self, prefix: str = ""):
+        pfx = f"{prefix}_" if prefix else ""
+        theta = getattr(self, f"{pfx}theta")
+        dim = int(theta.shape[1]) * 2
+        krot = int(theta.shape[0])
+        cos = mx.cos(theta)
+        sin = mx.sin(theta)
+        packed_pairs = _pack_pairs(getattr(self, f"{pfx}pairs"), self._rot_group_size)
+        scales_flat = getattr(self, f"{pfx}channel_scales").reshape(-1)
+        tag = f"_{prefix}" if prefix else ""
+        setattr(self, f"_rot{tag}_dim", dim)
+        setattr(self, f"_rot{tag}_krot", krot)
+        setattr(self, f"_rot{tag}_cos", cos)
+        setattr(self, f"_rot{tag}_sin", sin)
+        setattr(self, f"_rot{tag}_packed_pairs", packed_pairs)
+        setattr(self, f"_rot{tag}_scales_flat", scales_flat)
+
+    def _rotate(self, x: mx.array, prefix: str = "") -> mx.array:
+        tag = f"_{prefix}" if prefix else ""
+        dim = getattr(self, f"_rot{tag}_dim")
+        shape = x.shape
+        rotated = _apply_rotation(
+            x.reshape(-1, dim),
+            getattr(self, f"_rot{tag}_packed_pairs"),
+            getattr(self, f"_rot{tag}_cos"),
+            getattr(self, f"_rot{tag}_sin"),
+            getattr(self, f"_rot{tag}_scales_flat"),
+            dim,
+            getattr(self, f"_rot{tag}_krot"),
+            self._rot_group_size,
+        )
+        return rotated.reshape(shape)
+
+
+class RotateSwitchGLU(nn.Module, _CachedRotation):
+    """SwitchGLU with shared pairwise rotation injected before each sub-layer.
+
+    All experts share a single set of rotation parameters per projection:
+    ``gate_up_rot`` is applied to x before gate_proj/up_proj, and
+    ``down_rot`` is applied to the activation output before down_proj.
     """
 
-    def __init__(
-        self,
-        input_dims: int,
-        output_dims: int,
-        num_experts: int,
-        bias: bool = False,
-        group_size: int = 128,
-        bits: int = 4,
-        krot: int = 8,
-    ):
+    def __init__(self, glu: nn.Module, group_size: int, krot: int):
         super().__init__()
-        self._input_dims = input_dims
-        self._output_dims = output_dims
-        self._num_experts = num_experts
-        self.group_size = group_size
-        self.bits = bits
+        self.gate_proj = glu.gate_proj
+        self.up_proj = glu.up_proj
+        self.down_proj = glu.down_proj
+        self.activation = glu.activation
 
-        self.theta = mx.zeros((num_experts, krot, input_dims // 2))
-        self.pairs = mx.zeros((num_experts, krot, input_dims), dtype=mx.int16)
-        self.channel_scales = mx.ones((num_experts, 1, input_dims))
-
-        self.weight = mx.zeros((num_experts, output_dims, input_dims * bits // 32), dtype=mx.uint32)
-        self.scales = mx.zeros((num_experts, output_dims, input_dims // group_size))
-        self.biases = mx.zeros((num_experts, output_dims, input_dims // group_size))
-
-        if bias:
-            self.bias = mx.zeros((num_experts, output_dims))
-
+        gate_up_dim = glu.gate_proj.input_dims
+        down_dim = glu.down_proj.input_dims
+        self._init_rotation(krot, gate_up_dim, group_size, prefix="gate_up_rot")
+        self._init_rotation(krot, down_dim, group_size, prefix="down_rot")
         self._cached = False
 
-    @property
-    def input_dims(self):
-        return self._input_dims
-
-    @property
-    def output_dims(self):
-        return self._output_dims
-
-    @property
-    def num_experts(self):
-        return self._num_experts
-
     def _cache_rotation(self):
-        """Pre-compute sin/cos and pack pairs for all experts."""
-        self._krot = int(self.theta.shape[1])
-        self._dim = int(self.theta.shape[2]) * 2
-        self._cos = mx.cos(self.theta)
-        self._sin = mx.sin(self.theta)
-        self._packed_pairs = mx.stack([_pack_pairs(self.pairs[e], self.group_size) for e in range(self._num_experts)])
-        self._scales_flat = self.channel_scales.reshape(self._num_experts, -1)
+        self._cache_single_rotation("gate_up_rot")
+        self._cache_single_rotation("down_rot")
         self._cached = True
 
-    def _rotate_by_expert(
-        self,
-        x: mx.array,
-        indices: mx.array,
-        *,
-        already_sorted: bool = False,
-    ) -> mx.array:
-        """Apply per-expert rotation, grouping tokens by expert for efficiency."""
-        if x.shape[0] == 0:
-            return x
-
-        if already_sorted:
-            sorted_x, sorted_idx = x, indices
-        else:
-            order = mx.argsort(indices)
-            sorted_idx = indices[order]
-            sorted_x = x[order]
-
-        mx.eval(sorted_idx)
-        expert_ids, counts = mx.unique(sorted_idx, return_counts=True)
-        mx.eval(expert_ids, counts)
-
-        chunks, offset = [], 0
-        for i in range(expert_ids.shape[0]):
-            eid, cnt = int(expert_ids[i]), int(counts[i])
-            chunks.append(
-                _apply_rotation(
-                    sorted_x[offset : offset + cnt],
-                    self._packed_pairs[eid],
-                    self._cos[eid],
-                    self._sin[eid],
-                    self._scales_flat[eid],
-                    self._dim,
-                    self._krot,
-                    self.group_size,
-                )
-            )
-            offset += cnt
-
-        rotated = mx.concatenate(chunks, axis=0)
-        if not already_sorted:
-            rotated = rotated[mx.argsort(order)]
-        return rotated
-
-    def __call__(self, x: mx.array, indices: mx.array, sorted_indices: bool = False) -> mx.array:
+    def __call__(self, x, indices) -> mx.array:
         if not self._cached:
             self._cache_rotation()
 
-        has_mid = x.ndim >= 3 and x.shape[-2] == 1
-        x_2d = x.squeeze(-2) if has_mid else x
-        flat = x_2d.reshape(-1, self._dim)
+        from mlx_lm.models.switch_layers import _gather_sort, _scatter_unsort
 
-        rotated = self._rotate_by_expert(flat, indices.reshape(-1), already_sorted=sorted_indices)
-        rotated = rotated.reshape(x_2d.shape)
-        if has_mid:
-            rotated = mx.expand_dims(rotated, -2)
+        x = mx.expand_dims(x, (-2, -3))
 
-        y = mx.gather_qmm(
-            rotated,
-            self["weight"],
-            self["scales"],
-            self.get("biases"),
-            rhs_indices=indices,
-            transpose=True,
-            group_size=self.group_size,
-            bits=self.bits,
-            sorted_indices=sorted_indices,
-        )
-        if "bias" in self:
-            y = y + mx.expand_dims(self["bias"][indices], -2)
-        return y
+        do_sort = indices.size >= 64
+        idx = indices
+        inv_order = None
+        if do_sort:
+            x, idx, inv_order = _gather_sort(x, indices)
+
+        x = self._rotate(x, "gate_up_rot")
+
+        x_up = self.up_proj(x, idx, sorted_indices=do_sort)
+        x_gate = self.gate_proj(x, idx, sorted_indices=do_sort)
+
+        act = self.activation(x_up, x_gate)
+        act = self._rotate(act, "down_rot")
+
+        x = self.down_proj(act, idx, sorted_indices=do_sort)
+
+        if do_sort:
+            x = _scatter_unsort(x, inv_order, indices.shape)
+
+        return x.squeeze(-2)

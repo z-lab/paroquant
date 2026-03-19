@@ -8,7 +8,7 @@ import mlx.core as mx
 import mlx.nn as mlx_nn
 import numpy as np
 
-from .modules import RotateQuantizedLinear, RotateQuantizedSwitchLinear
+from .modules import RotateQuantizedLinear, RotateSwitchGLU
 
 logger = logging.getLogger(__name__)
 
@@ -119,7 +119,10 @@ def _convert_paro_native(weights: dict, group_size: int, bits: int = _BITS) -> d
 
 
 _EXPERT_RE = re.compile(r"^(.+)\.experts\.(\d+)\.(\w+)\.(\w+)$")
-_STACKABLE = ("weight", "scales", "biases", "theta", "pairs", "channel_scales")
+_STACKABLE = ("weight", "scales", "biases")
+_SHARED_ROT_RE = re.compile(
+    r"^(.+)\.experts\.(gate_up_weight|down_weight)_(theta|pairs|channel_scales)$"
+)
 
 
 def _stack_moe_expert_weights(weights: dict) -> dict:
@@ -149,6 +152,29 @@ def _stack_moe_expert_weights(weights: dict) -> dict:
             if all(src):
                 weights[dest] = mx.stack([weights.pop(k) for k in src])
 
+    return weights
+
+
+def _remap_shared_moe_rotation(weights: dict) -> dict:
+    """Remap shared expert rotation keys to the switch_mlp namespace.
+
+    ``...experts.gate_up_weight_{theta|pairs|channel_scales}``
+    → ``...switch_mlp.gate_up_rot_{theta|pairs|channel_scales}``
+
+    ``...experts.down_weight_{theta|pairs|channel_scales}``
+    → ``...switch_mlp.down_rot_{theta|pairs|channel_scales}``
+    """
+    remap = {
+        "gate_up_weight": "gate_up_rot",
+        "down_weight": "down_rot",
+    }
+    for key in list(weights):
+        m = _SHARED_ROT_RE.match(key)
+        if m is None:
+            continue
+        base, proj, suffix = m.groups()
+        new_key = f"{base}.switch_mlp.{remap[proj]}_{suffix}"
+        weights[new_key] = weights.pop(key)
     return weights
 
 
@@ -216,68 +242,80 @@ def _patch_quantized_layers(model, weights: dict, bits: int, group_size: int):
     """Replace linear layers with appropriate quantized variants based on weight keys.
 
     - Dense layers with .theta → RotateQuantizedLinear
-    - SwitchLinear with stacked .theta (ndim=3) → RotateQuantizedSwitchLinear
     - SwitchLinear with stacked uint32 weight → QuantizedSwitchLinear
+    - SwitchGLU with shared rotation keys → RotateSwitchGLU
     """
     try:
-        from mlx_lm.models.switch_layers import SwitchLinear, QuantizedSwitchLinear
+        from mlx_lm.models.switch_layers import (
+            SwitchGLU,
+            SwitchLinear,
+            QuantizedSwitchLinear,
+        )
 
         _has_switch = True
     except ImportError:
         _has_switch = False
 
-    theta_keys = {k.removesuffix(".theta"): weights[k] for k in weights if k.endswith(".theta")}
+    # Dense rotation layers
+    for prefix in sorted(k.removesuffix(".theta") for k in weights if k.endswith(".theta")):
+        original = _get_module(model, prefix)
+        _set_module(
+            model,
+            prefix,
+            RotateQuantizedLinear(
+                input_dims=original.weight.shape[-1],
+                output_dims=original.weight.shape[0],
+                bias="bias" in original,
+                group_size=group_size,
+                bits=bits,
+                krot=weights[f"{prefix}.theta"].shape[0],
+            ),
+        )
 
-    for prefix in sorted(theta_keys):
-        theta = theta_keys[prefix]
-        if _has_switch and theta.ndim == 3:
-            num_experts, krot, half_dim = theta.shape
+    if not _has_switch:
+        return
+
+    # SwitchLinear → QuantizedSwitchLinear (quantized experts without rotation)
+    for path, mod in model.named_modules():
+        if not isinstance(mod, SwitchLinear):
+            continue
+        w = weights.get(f"{path}.weight")
+        if w is not None and w.dtype in (mx.uint32, mx.uint16, mx.uint8):
             _set_module(
                 model,
-                prefix,
-                RotateQuantizedSwitchLinear(
-                    input_dims=half_dim * 2,
-                    output_dims=_get_module(model, prefix).output_dims,
-                    num_experts=num_experts,
-                    bias=False,
+                path,
+                QuantizedSwitchLinear(
+                    mod.input_dims,
+                    mod.output_dims,
+                    mod.num_experts,
+                    bias="bias" in mod,
                     group_size=group_size,
                     bits=bits,
-                    krot=krot,
-                ),
-            )
-        else:
-            original = _get_module(model, prefix)
-            _set_module(
-                model,
-                prefix,
-                RotateQuantizedLinear(
-                    input_dims=original.weight.shape[-1],
-                    output_dims=original.weight.shape[0],
-                    bias="bias" in original,
-                    group_size=group_size,
-                    bits=bits,
-                    krot=theta.shape[0],
                 ),
             )
 
-    if _has_switch:
+    # SwitchGLU → RotateSwitchGLU (when shared rotation keys are present)
+    for path, mod in model.named_modules():
+        if not isinstance(mod, SwitchGLU):
+            continue
+        rot_key = f"{path}.gate_up_rot_theta"
+        if rot_key not in weights:
+            continue
+        krot = weights[rot_key].shape[0]
+        _set_module(model, path, RotateSwitchGLU(mod, group_size, krot))
+
+    # Custom Metal kernels can produce NaN when composed lazily with certain
+    # downstream ops (e.g. gated_delta_update in GatedDeltaNet).  Force
+    # evaluation for RotateQuantizedLinear layers inside such modules.
+    _needs_eval = set()
+    for path, mod in model.named_modules():
+        if type(mod).__name__ == "GatedDeltaNet":
+            _needs_eval.add(path)
+    if _needs_eval:
         for path, mod in model.named_modules():
-            if not isinstance(mod, SwitchLinear):
-                continue
-            w = weights.get(f"{path}.weight")
-            if w is not None and w.dtype in (mx.uint32, mx.uint16, mx.uint8):
-                _set_module(
-                    model,
-                    path,
-                    QuantizedSwitchLinear(
-                        mod.input_dims,
-                        mod.output_dims,
-                        mod.num_experts,
-                        bias="bias" in mod,
-                        group_size=group_size,
-                        bits=bits,
-                    ),
-                )
+            if isinstance(mod, RotateQuantizedLinear):
+                if any(path.startswith(p + ".") for p in _needs_eval):
+                    mod._force_eval = True
 
 
 def _is_io_layer(path, module):
@@ -322,6 +360,7 @@ def load(model_path: str, lazy: bool = False, force_text: bool = False) -> tuple
         weights = model.vision_tower.sanitize(weights)
 
     weights = _stack_moe_expert_weights(weights)
+    weights = _remap_shared_moe_rotation(weights)
     _patch_quantized_layers(model, weights, bits, group_size)
     model.load_weights(list(weights.items()), strict=False)
     mlx_nn.quantize(model, group_size, bits, mode="affine", class_predicate=_is_io_layer)
