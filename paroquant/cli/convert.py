@@ -244,7 +244,7 @@ def _quantize_layer(state_dict: dict, device: str) -> tuple[dict[str, torch.Tens
     bits = int(_get_value(state_dict, "n_bits", "quantizer.n_bits"))
     group_size = int(_get_value(state_dict, "group_size", "quantizer.group_size"))
 
-    pairs = _stack_if_numbered(state_dict, "pairs_grouped").to(device=device, dtype=torch.uint8)
+    pairs = _stack_if_numbered(state_dict, "pairs_grouped").to(device=device, dtype=torch.int16)
     theta = _stack_if_numbered(state_dict, "angles_grouped").to(device=device, dtype=torch.float32)
 
     channel_scales_opt = state_dict["channel_scales"].to(device=device, dtype=torch.float32)
@@ -293,7 +293,7 @@ def _quantize_moe(
     if gate_up_in != down_out:
         raise ValueError(f"Unexpected MoE shapes: gate_up={tuple(gate_up.shape)} down={tuple(down.shape)}")
 
-    gate_up_pairs = _stack_if_numbered(state_dict, "gate_up_pairs_grouped").to(device=device, dtype=torch.uint8)
+    gate_up_pairs = _stack_if_numbered(state_dict, "gate_up_pairs_grouped").to(device=device, dtype=torch.int16)
     gate_up_theta = _stack_if_numbered(state_dict, "gate_up_angles_grouped").to(device=device, dtype=torch.float32)
     gate_up_channel_scales = state_dict["gate_up_channel_scales"].to(device=device, dtype=torch.float32)
     gate_up_scales_flat = state_dict["gate_up_quantizer.scale"].to(device=device, dtype=torch.float32).reshape(-1, 1)
@@ -301,7 +301,7 @@ def _quantize_moe(
         state_dict["gate_up_quantizer.zero_point_float"].to(device=device, dtype=torch.float32).reshape(-1, 1)
     )
 
-    down_pairs = _stack_if_numbered(state_dict, "down_pairs_grouped").to(device=device, dtype=torch.uint8)
+    down_pairs = _stack_if_numbered(state_dict, "down_pairs_grouped").to(device=device, dtype=torch.int16)
     down_theta = _stack_if_numbered(state_dict, "down_angles_grouped").to(device=device, dtype=torch.float32)
     down_channel_scales = state_dict["down_channel_scales"].to(device=device, dtype=torch.float32)
     down_scales_flat = state_dict["down_quantizer.scale"].to(device=device, dtype=torch.float32).reshape(-1, 1)
@@ -395,7 +395,6 @@ def _inject_quantized_moe_state_dict(
 
         updated.pop(f"{base_prefix}.gate_up_proj", None)
         updated.pop(f"{base_prefix}.down_proj", None)
-
         num_experts = buffers["gate_proj"]["qweight"].shape[0]
         for expert_id in range(num_experts):
             for proj in ("gate_proj", "up_proj", "down_proj"):
