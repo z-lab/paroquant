@@ -69,7 +69,6 @@ class RotateQuantizedLinear(nn.Module):
         if bias:
             self.bias = mx.zeros((output_dims,))
 
-        self._force_eval = False
         self._cached = False
 
     def _cache_rotation(self):
@@ -110,8 +109,6 @@ class RotateQuantizedLinear(nn.Module):
         )
         if "bias" in self:
             y = y + self.bias
-        if self._force_eval:
-            mx.eval(y)
         return y
 
 

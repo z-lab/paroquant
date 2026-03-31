@@ -304,18 +304,6 @@ def _patch_quantized_layers(model, weights: dict, bits: int, group_size: int):
         krot = weights[rot_key].shape[0]
         _set_module(model, path, RotateSwitchGLU(mod, group_size, krot))
 
-    # Custom Metal kernels can produce NaN when composed lazily with certain
-    # downstream ops (e.g. gated_delta_update in GatedDeltaNet).  Force
-    # evaluation for RotateQuantizedLinear layers inside such modules.
-    _needs_eval = set()
-    for path, mod in model.named_modules():
-        if type(mod).__name__ == "GatedDeltaNet":
-            _needs_eval.add(path)
-    if _needs_eval:
-        for path, mod in model.named_modules():
-            if isinstance(mod, RotateQuantizedLinear):
-                if any(path.startswith(p + ".") for p in _needs_eval):
-                    mod._force_eval = True
 
 
 def _is_io_layer(path, module):
