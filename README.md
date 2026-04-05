@@ -26,8 +26,8 @@ State-of-the-art INT4 quantization for LLMs. ParoQuant uses learned pairwise rot
 pip install "paroquant[vllm]"
 
 # NVIDIA GPU (CUDA 13.0)
-pip install "paroquant[vllm]" "vllm==0.17.1" \
-  --extra-index-url https://wheels.vllm.ai/0.17.1/cu130 \
+pip install "paroquant[vllm]" "vllm==0.19.0" \
+  --extra-index-url https://wheels.vllm.ai/2a69949bdadf0e8942b7a1619b229cb475beef20/cu130 \
   --extra-index-url https://download.pytorch.org/whl/cu130
 
 # Apple Silicon
@@ -77,6 +77,12 @@ docker run --pull=always --rm -it --gpus all --ipc=host -p 8000:8000 \
 
 All models are available on [Hugging Face](https://huggingface.co/collections/z-lab/paroquant). Swap the model name in the commands above to try any of them.
 
+**Gemma 4**
+
+| Model          | Checkpoint                                                                      |
+| -------------- | ------------------------------------------------------------------------------- |
+| gemma-4-31B-it | [`z-lab/gemma-4-31B-it-PARO`](https://huggingface.co/z-lab/gemma-4-31B-it-PARO) |
+
 **Qwen3.5**
 
 | Model | Checkpoint |
@@ -86,6 +92,7 @@ All models are available on [Hugging Face](https://huggingface.co/collections/z-
 | Qwen3.5-4B | [`z-lab/Qwen3.5-4B-PARO`](https://huggingface.co/z-lab/Qwen3.5-4B-PARO) |
 | Qwen3.5-9B | [`z-lab/Qwen3.5-9B-PARO`](https://huggingface.co/z-lab/Qwen3.5-9B-PARO) |
 | Qwen3.5-27B | [`z-lab/Qwen3.5-27B-PARO`](https://huggingface.co/z-lab/Qwen3.5-27B-PARO) |
+| Qwen3.5-35B-A3B | [`z-lab/Qwen3.5-35B-A3B-PARO`](https://huggingface.co/z-lab/Qwen3.5-35B-A3B-PARO) |
 
 **Qwen3**
 
