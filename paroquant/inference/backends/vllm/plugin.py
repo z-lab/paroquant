@@ -225,13 +225,7 @@ class ParoQuantLinearMethod(AWQMarlinLinearMethod):
         proxy.input_size_per_partition = k
         proxy.output_size_per_partition = out_n
         proxy.num_groups = num_groups
-
-        # Temporarily patch the kernel config so Marlin ops use the
-        # partition shape instead of the full merged QKV shape.
-        orig_shape = self.kernel.config.partition_weight_shape
-        self.kernel.config.partition_weight_shape = (k, out_n)
         super().process_weights_after_loading(proxy)
-        self.kernel.config.partition_weight_shape = orig_shape
         return proxy
 
     def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
