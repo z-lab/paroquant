@@ -26,7 +26,7 @@ State-of-the-art INT4 quantization for LLMs. ParoQuant uses learned pairwise rot
 pip install "paroquant[vllm]"
 
 # NVIDIA GPU (CUDA 13.0)
-pip install "paroquant[vllm] vllm==0.17.1" \
+pip install "paroquant[vllm]" "vllm==0.17.1" \
   --extra-index-url https://wheels.vllm.ai/0.17.1/cu130 \
   --extra-index-url https://download.pytorch.org/whl/cu130
 
@@ -52,18 +52,9 @@ python -m paroquant.cli.chat --model $MODEL
 python -m paroquant.cli.serve --model $MODEL --port 8000
 ```
 
-Add `--llm-only` if you do not wish to load the VLM components.
+For vLLM, the arguments are passed to vLLM directly. See [vLLM docs](https://docs.vllm.ai/en/latest/configuration/serve_args/) for more details.
 
-### Agent with Tool Calling
-
-Start the API server first, then install the agent dependencies and run:
-
-```bash
-pip install "paroquant[agent]"
-python -m paroquant.cli.agent --model $MODEL
-```
-
-Tool use (web fetch, filesystem, time) requires [Node.js](https://nodejs.org/en/download).
+For MLX, add `--vlm` if you wish to load the VLM components and use the model's multimodal features. For vLLM, VLM components are loaded by default and can be skipped with the server argument `--language-model-only`.
 
 ### Docker (NVIDIA GPU)
 

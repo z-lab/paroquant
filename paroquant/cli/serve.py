@@ -31,7 +31,7 @@ def _serve_mlx():
 
     original_argv = list(sys.argv)
     model_arg = None
-    llm_only = False
+    llm_only = True
     stripped_argv = [original_argv[0]]
     i = 1
     while i < len(original_argv):
@@ -47,7 +47,12 @@ def _serve_mlx():
             i += 1
             continue
         if arg == "--llm-only":
+            # For backward compatability.
             llm_only = True
+            i += 1
+            continue
+        if arg == "--vlm":
+            llm_only = False
             i += 1
             continue
         stripped_argv.append(arg)
@@ -80,10 +85,6 @@ def _serve_mlx():
         import mlx_lm.server as mlx_server
 
         tokenizer = getattr(processor, "tokenizer", processor)
-        if hasattr(tokenizer, "_tool_call_start"):
-            tokenizer._tool_call_start = None
-        if hasattr(tokenizer, "_tool_call_end"):
-            tokenizer._tool_call_end = None
         sys.argv = stripped_argv
 
         def _patched_load(path_or_hf_repo, tokenizer_config=None, adapter_path=None, **kwargs):
