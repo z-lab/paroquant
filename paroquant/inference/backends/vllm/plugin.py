@@ -242,9 +242,10 @@ class ParoQuantLinearMethod(AWQMarlinLinearMethod):
             sc = layer.scales.data.split(sizes, dim=1)
             qz = layer.qzeros.data.split([s // pack for s in sizes], dim=1)
 
-            num_groups = k // self.quant_config.group_size
             proxies = [
-                self._convert_partition(qw[i], sc[i], qz[i], k, sizes[i], num_groups)
+                self._convert_partition(
+                    qw[i], sc[i], qz[i], k, sizes[i], layer.num_groups
+                )
                 for i in range(n)
             ]
 
