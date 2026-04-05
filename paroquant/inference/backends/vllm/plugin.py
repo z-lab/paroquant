@@ -5,7 +5,11 @@ from typing import TYPE_CHECKING, Any
 import torch
 from torch.nn import Parameter
 from vllm.logger import init_logger
-from vllm.model_executor.layers.linear import LinearBase, LinearMethodBase, UnquantizedLinearMethod
+from vllm.model_executor.layers.linear import (
+    LinearBase,
+    LinearMethodBase,
+    UnquantizedLinearMethod,
+)
 from vllm.model_executor.layers.quantization import register_quantization_config
 from vllm.model_executor.layers.quantization.awq_marlin import AWQMarlinLinearMethod
 from vllm.model_executor.layers.quantization.base_config import QuantizationConfig
@@ -25,7 +29,7 @@ if TYPE_CHECKING:
 logger = init_logger(__name__)
 
 _SHARD_INDEX = {"q": 0, "k": 1, "v": 2}
-_QUANT_TYPE = {4: scalar_types.uint4}
+_QUANT_TYPE = {4: scalar_types.uint4b8}
 _MARLIN_TILE_N = 64
 
 
@@ -48,7 +52,9 @@ def _rotation_weight_loader(
         return
 
     indices = (
-        loaded_shard_id if isinstance(loaded_shard_id, tuple) else (_SHARD_INDEX.get(loaded_shard_id, loaded_shard_id),)
+        loaded_shard_id
+        if isinstance(loaded_shard_id, tuple)
+        else (_SHARD_INDEX.get(loaded_shard_id, loaded_shard_id),)
     )
     for idx in indices:
         param.data[idx].copy_(loaded_weight)
@@ -56,16 +62,24 @@ def _rotation_weight_loader(
 
 @register_quantization_config("paroquant")
 class ParoQuantConfig(QuantizationConfig):
-    def __init__(self, bits: int, group_size: int, krot: int, modules_to_not_convert: list[str] | None = None) -> None:
+    def __init__(
+        self,
+        bits: int,
+        group_size: int,
+        krot: int,
+        modules_to_not_convert: list[str] | None = None,
+    ) -> None:
         super().__init__()
         if bits not in _QUANT_TYPE:
             raise ValueError(f"Unsupported bits={bits}. Supported: {list(_QUANT_TYPE)}")
         self.bits = bits
+        self.weight_bits = bits
         self.group_size = group_size
         self.krot = krot
         self.pack_factor = 32 // bits
         self.quant_type = _QUANT_TYPE[bits]
         self.modules_to_not_convert = modules_to_not_convert or []
+        self.zero_point = False
 
     def __repr__(self) -> str:
         return f"ParoQuantConfig(bits={self.bits}, group_size={self.group_size}, krot={self.krot})"
@@ -113,6 +127,7 @@ class ParoQuantConfig(QuantizationConfig):
             for k, info in metadata.items()
             if (dt := info.get("dtype")) and _SF_DTYPES[dt] not in unquant_dtypes
         }
+
         # Strip to "layers.N..." suffix so vLLM's substr matching works
         # regardless of model nesting depth (safetensors may store
         # "model.language_model.layers.0.X" while vLLM uses
@@ -124,10 +139,17 @@ class ParoQuantConfig(QuantizationConfig):
 
         self.modules_to_not_convert = [_strip(k) for k in leaf_modules - quant_modules]
 
-    def get_quant_method(self, layer: torch.nn.Module, prefix: str) -> LinearMethodBase | None:
+    def get_quant_method(
+        self, layer: torch.nn.Module, prefix: str
+    ) -> LinearMethodBase | None:
         if not isinstance(layer, LinearBase):
             return None
-        if is_layer_skipped(prefix, self.modules_to_not_convert, self.packed_modules_mapping, skip_with_substr=True):
+        if is_layer_skipped(
+            prefix,
+            self.modules_to_not_convert,
+            self.packed_modules_mapping,
+            skip_with_substr=True,
+        ):
             return UnquantizedLinearMethod()
         if not check_marlin_supports_layer(layer, self.group_size):
             logger.warning_once(
@@ -191,9 +213,15 @@ class ParoQuantLinearMethod(AWQMarlinLinearMethod):
             out_n += pad
 
         proxy = torch.nn.Module()
-        proxy.register_parameter("qweight", Parameter(qw.contiguous(), requires_grad=False))
-        proxy.register_parameter("scales", Parameter(sc.contiguous(), requires_grad=False))
-        proxy.register_parameter("qzeros", Parameter(qz.contiguous(), requires_grad=False))
+        proxy.register_parameter(
+            "qweight", Parameter(qw.contiguous(), requires_grad=False)
+        )
+        proxy.register_parameter(
+            "scales", Parameter(sc.contiguous(), requires_grad=False)
+        )
+        proxy.register_parameter(
+            "qzeros", Parameter(qz.contiguous(), requires_grad=False)
+        )
         proxy.input_size_per_partition = k
         proxy.output_size_per_partition = out_n
         proxy.num_groups = num_groups
@@ -214,7 +242,12 @@ class ParoQuantLinearMethod(AWQMarlinLinearMethod):
             sc = layer.scales.data.split(sizes, dim=1)
             qz = layer.qzeros.data.split([s // pack for s in sizes], dim=1)
 
-            proxies = [self._convert_partition(qw[i], sc[i], qz[i], k, sizes[i], layer.num_groups) for i in range(n)]
+            proxies = [
+                self._convert_partition(
+                    qw[i], sc[i], qz[i], k, sizes[i], layer.num_groups
+                )
+                for i in range(n)
+            ]
 
             del layer.qweight, layer.scales, layer.qzeros
             layer.marlin_qweight = [p.qweight for p in proxies]
@@ -223,23 +256,31 @@ class ParoQuantLinearMethod(AWQMarlinLinearMethod):
             layer.workspace = proxies[0].workspace
             layer.g_idx = proxies[0].g_idx
             layer.g_idx_sort_indices = proxies[0].g_idx_sort_indices
-            layer.padded_partition_sizes = [p.output_size_per_partition for p in proxies]
+            layer.padded_partition_sizes = [
+                p.output_size_per_partition for p in proxies
+            ]
 
         layer.rot_theta = layer.theta.data
         layer.rot_pairs = layer.pairs.data
         layer.rot_scales = layer.channel_scales.data
         del layer.theta, layer.pairs, layer.channel_scales
 
-    def apply(self, layer: torch.nn.Module, x: torch.Tensor, bias: torch.Tensor | None = None) -> torch.Tensor:
+    def apply(
+        self, layer: torch.nn.Module, x: torch.Tensor, bias: torch.Tensor | None = None
+    ) -> torch.Tensor:
         n = layer.num_partitions
 
         if n == 1:
-            x = torch.ops.rotation.rotate(x, layer.rot_pairs[0], layer.rot_theta[0], layer.rot_scales[0])
+            x = torch.ops.rotation.rotate(
+                x, layer.rot_pairs[0], layer.rot_theta[0], layer.rot_scales[0]
+            )
             return super().apply(layer, x, bias)
 
         outputs = []
         for i in range(n):
-            x_rot = torch.ops.rotation.rotate(x, layer.rot_pairs[i], layer.rot_theta[i], layer.rot_scales[i])
+            x_rot = torch.ops.rotation.rotate(
+                x, layer.rot_pairs[i], layer.rot_theta[i], layer.rot_scales[i]
+            )
             out = apply_awq_marlin_linear(
                 input=x_rot,
                 weight=layer.marlin_qweight[i],
@@ -254,7 +295,7 @@ class ParoQuantLinearMethod(AWQMarlinLinearMethod):
                 bias=None,
             )
             if layer.padded_partition_sizes[i] != layer.output_partition_sizes[i]:
-                out = out[..., :layer.output_partition_sizes[i]]
+                out = out[..., : layer.output_partition_sizes[i]]
             outputs.append(out)
 
         result = torch.cat(outputs, dim=-1)
