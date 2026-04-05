@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
-
+from copy import deepcopy
 import torch
 from torch.nn import Parameter
 from vllm.logger import init_logger
@@ -16,6 +16,7 @@ from vllm.model_executor.layers.quantization.utils.marlin_utils import (
 from vllm.model_executor.layers.quantization.utils.quant_utils import is_layer_skipped
 from vllm.scalar_type import scalar_types
 from vllm.transformers_utils.config import get_safetensors_params_metadata
+from vllm.model_executor.parameter import PackedvLLMParameter, GroupQuantScaleParameter
 
 import paroquant.kernels.cuda  # noqa: F401 — registers torch.ops.rotation.rotate
 
@@ -56,7 +57,8 @@ def _rotation_weight_loader(
 
 @register_quantization_config("paroquant")
 class ParoQuantConfig(QuantizationConfig):
-    def __init__(self, bits: int, group_size: int, krot: int, modules_to_not_convert: list[str] | None = None) -> None:
+
+    def __init__(self, bits: int, group_size: int, krot: int, zero_point: bool) -> None:
         super().__init__()
         if bits not in _QUANT_TYPE:
             raise ValueError(f"Unsupported bits={bits}. Supported: {list(_QUANT_TYPE)}")
@@ -65,10 +67,12 @@ class ParoQuantConfig(QuantizationConfig):
         self.krot = krot
         self.pack_factor = 32 // bits
         self.quant_type = _QUANT_TYPE[bits]
-        self.modules_to_not_convert = modules_to_not_convert or []
+        # We rely on the existance of `qweight` etc. to determin the skipped layers.
+        self.modules_to_not_convert = None
+        self.zero_point = zero_point
 
     def __repr__(self) -> str:
-        return f"ParoQuantConfig(bits={self.bits}, group_size={self.group_size}, krot={self.krot})"
+        return f"ParoQuantConfig(bits={self.bits}, group_size={self.group_size}, krot={self.krot}, zero_point={self.zero_point})"
 
     @classmethod
     def get_name(cls) -> "QuantizationMethods":
@@ -92,7 +96,7 @@ class ParoQuantConfig(QuantizationConfig):
             bits=cls.get_from_keys_or(config, ["bits"], 4),
             group_size=cls.get_from_keys_or(config, ["group_size"], 128),
             krot=cls.get_from_keys_or(config, ["krot"], 8),
-            modules_to_not_convert=config.get("modules_to_not_convert"),
+            zero_point=cls.get_from_keys_or(config, ["zero_point"], True),
         )
 
     def maybe_update_config(self, model_name: str, revision: str | None = None):
@@ -180,7 +184,7 @@ class ParoQuantLinearMethod(AWQMarlinLinearMethod):
         layer.num_partitions = n_parts
         layer.output_partition_sizes = output_partition_sizes
 
-    def _convert_partition(self, qw, sc, qz, k, out_n, num_groups):
+    def _convert_partition(self, qw, sc, qz, k, out_n):
         """AWQ→Marlin conversion for a single partition via the parent method."""
         # Pad output dim to Marlin tile boundary when needed.
         if out_n % _MARLIN_TILE_N != 0:
@@ -192,14 +196,36 @@ class ParoQuantLinearMethod(AWQMarlinLinearMethod):
             out_n += pad
 
         proxy = torch.nn.Module()
-        proxy.register_parameter("qweight", Parameter(qw.contiguous(), requires_grad=False))
-        proxy.register_parameter("scales", Parameter(sc.contiguous(), requires_grad=False))
-        proxy.register_parameter("qzeros", Parameter(qz.contiguous(), requires_grad=False))
+        proxy.register_parameter(
+            "qweight",
+            PackedvLLMParameter(
+                data=qw.contiguous(),
+                input_dim=0,
+                output_dim=1,
+                packed_dim=1,
+                packed_factor=self.quant_config.pack_factor,
+                weight_loader=None,
+            ),
+        )
+        proxy.register_parameter(
+            "scales", GroupQuantScaleParameter(data=sc.contiguous(), input_dim=0, output_dim=1, weight_loader=None)
+        )
+        proxy.register_parameter(
+            "qzeros",
+            PackedvLLMParameter(
+                data=qz.contiguous(),
+                input_dim=0,
+                output_dim=1,
+                packed_dim=1,
+                packed_factor=self.quant_config.pack_factor,
+                weight_loader=None,
+            ),
+        )
         proxy.input_size_per_partition = k
         proxy.output_size_per_partition = out_n
-        proxy.num_groups = num_groups
+        self.kernel.config.partition_weight_shape = (k, out_n)
         super().process_weights_after_loading(proxy)
-        return proxy
+        return proxy, deepcopy(self.kernel.workspace)
 
     def process_weights_after_loading(self, layer: torch.nn.Module) -> None:
         n = layer.num_partitions
@@ -215,13 +241,13 @@ class ParoQuantLinearMethod(AWQMarlinLinearMethod):
             sc = layer.scales.data.split(sizes, dim=1)
             qz = layer.qzeros.data.split([s // pack for s in sizes], dim=1)
 
-            proxies = [self._convert_partition(qw[i], sc[i], qz[i], k, sizes[i], layer.num_groups) for i in range(n)]
+            proxies, workspaces = zip(*[self._convert_partition(qw[i], sc[i], qz[i], k, sizes[i]) for i in range(n)])
 
             del layer.qweight, layer.scales, layer.qzeros
             layer.marlin_qweight = [p.qweight for p in proxies]
             layer.marlin_scales = [p.scales for p in proxies]
             layer.marlin_qzeros = [p.qzeros for p in proxies]
-            layer.workspace = proxies[0].workspace
+            layer.workspace = workspaces[0]
             layer.g_idx = proxies[0].g_idx
             layer.g_idx_sort_indices = proxies[0].g_idx_sort_indices
             layer.padded_partition_sizes = [p.output_size_per_partition for p in proxies]
