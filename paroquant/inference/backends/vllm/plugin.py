@@ -5,17 +5,10 @@ from typing import TYPE_CHECKING, Any
 import torch
 from torch.nn import Parameter
 from vllm.logger import init_logger
-from vllm.model_executor.layers.fused_moe.activation import apply_moe_activation
-from vllm.model_executor.layers.fused_moe.fused_marlin_moe import fused_marlin_moe
-from vllm.model_executor.layers.fused_moe.layer import FusedMoE
-from vllm.model_executor.layers.linear import LinearBase, UnquantizedLinearMethod
+from vllm.model_executor.layers.linear import LinearBase, LinearMethodBase, UnquantizedLinearMethod
 from vllm.model_executor.layers.quantization import register_quantization_config
-from vllm.model_executor.layers.quantization.awq_marlin import (
-    AWQMarlinConfig,
-    AWQMarlinLinearMethod,
-    AWQMarlinMoEMethod,
-)
-from vllm.model_executor.layers.quantization.base_config import QuantizationConfig, QuantizeMethodBase
+from vllm.model_executor.layers.quantization.awq_marlin import AWQMarlinLinearMethod
+from vllm.model_executor.layers.quantization.base_config import QuantizationConfig
 from vllm.model_executor.layers.quantization.utils.marlin_utils import (
     apply_awq_marlin_linear,
     check_marlin_supports_layer,
@@ -63,38 +56,16 @@ def _rotation_weight_loader(
 
 @register_quantization_config("paroquant")
 class ParoQuantConfig(QuantizationConfig):
-    def __init__(
-        self,
-        bits: int,
-        group_size: int,
-        krot: int,
-        modules_to_not_convert: list[str] | None = None,
-        *,
-        zero_point: bool = True,
-        lm_head_quantized: bool = False,
-        full_config: dict[str, Any] | None = None,
-    ) -> None:
+    def __init__(self, bits: int, group_size: int, krot: int, modules_to_not_convert: list[str] | None = None) -> None:
         super().__init__()
         if bits not in _QUANT_TYPE:
             raise ValueError(f"Unsupported bits={bits}. Supported: {list(_QUANT_TYPE)}")
         self.bits = bits
-        self.weight_bits = bits
         self.group_size = group_size
         self.krot = krot
         self.pack_factor = 32 // bits
         self.quant_type = _QUANT_TYPE[bits]
-        self.zero_point = zero_point
-        self.lm_head_quantized = lm_head_quantized
         self.modules_to_not_convert = modules_to_not_convert or []
-        self.full_config = full_config or {
-            "quant_method": "paroquant",
-            "bits": bits,
-            "group_size": group_size,
-            "krot": krot,
-            "zero_point": zero_point,
-            "lm_head": lm_head_quantized,
-            "modules_to_not_convert": self.modules_to_not_convert,
-        }
 
     def __repr__(self) -> str:
         return f"ParoQuantConfig(bits={self.bits}, group_size={self.group_size}, krot={self.krot})"
@@ -122,9 +93,6 @@ class ParoQuantConfig(QuantizationConfig):
             group_size=cls.get_from_keys_or(config, ["group_size"], 128),
             krot=cls.get_from_keys_or(config, ["krot"], 8),
             modules_to_not_convert=config.get("modules_to_not_convert"),
-            zero_point=cls.get_from_keys_or(config, ["zero_point"], True),
-            lm_head_quantized=cls.get_from_keys_or(config, ["lm_head"], False),
-            full_config=config,
         )
 
     def maybe_update_config(self, model_name: str, revision: str | None = None):
@@ -157,26 +125,7 @@ class ParoQuantConfig(QuantizationConfig):
 
         self.modules_to_not_convert = [_strip(k) for k in leaf_modules - quant_modules]
 
-    def _awq_moe_config(self) -> AWQMarlinConfig:
-        cfg = {
-            "quant_method": "awq",
-            "bits": self.bits,
-            "group_size": self.group_size,
-            "zero_point": True,
-            "lm_head": False,
-            "modules_to_not_convert": self.modules_to_not_convert,
-        }
-        return AWQMarlinConfig.from_config(cfg)
-
-    def get_quant_method(self, layer: torch.nn.Module, prefix: str) -> QuantizeMethodBase | None:
-        if isinstance(layer, FusedMoE):
-            # Preserve AWQ-Marlin/MoeWNA16 fallback logic, but inject ParoQuant
-            # online rotations when AWQ-Marlin MoE is selected.
-            method = self._awq_moe_config().get_quant_method(layer, prefix)
-            if isinstance(method, AWQMarlinMoEMethod):
-                return ParoQuantMoEMethod(self, layer.moe_config)
-            return method
-
+    def get_quant_method(self, layer: torch.nn.Module, prefix: str) -> LinearMethodBase | None:
         if not isinstance(layer, LinearBase):
             return None
         if is_layer_skipped(prefix, self.modules_to_not_convert, self.packed_modules_mapping, skip_with_substr=True):
@@ -286,24 +235,12 @@ class ParoQuantLinearMethod(AWQMarlinLinearMethod):
         n = layer.num_partitions
 
         if n == 1:
-            x = torch.ops.rotation.rotate(
-                x,
-                layer.rot_pairs[0],
-                layer.rot_theta[0],
-                layer.rot_scales[0],
-                self.quant_config.group_size,
-            )
+            x = torch.ops.rotation.rotate(x, layer.rot_pairs[0], layer.rot_theta[0], layer.rot_scales[0])
             return super().apply(layer, x, bias)
 
         outputs = []
         for i in range(n):
-            x_rot = torch.ops.rotation.rotate(
-                x,
-                layer.rot_pairs[i],
-                layer.rot_theta[i],
-                layer.rot_scales[i],
-                self.quant_config.group_size,
-            )
+            x_rot = torch.ops.rotation.rotate(x, layer.rot_pairs[i], layer.rot_theta[i], layer.rot_scales[i])
             out = apply_awq_marlin_linear(
                 input=x_rot,
                 weight=layer.marlin_qweight[i],
@@ -325,113 +262,3 @@ class ParoQuantLinearMethod(AWQMarlinLinearMethod):
         if bias is not None:
             result = result + bias
         return result
-
-
-class ParoQuantMoEMethod(AWQMarlinMoEMethod):
-    """AWQ-Marlin MoE with ParoQuant online rotations on both expert GEMMs."""
-
-    def __init__(self, quant_config: ParoQuantConfig, moe) -> None:
-        super().__init__(quant_config, moe)
-        self.quant_config: ParoQuantConfig = quant_config
-
-    def create_weights(
-        self,
-        layer: torch.nn.Module,
-        num_experts: int,
-        hidden_size: int,
-        intermediate_size_per_partition: int,
-        params_dtype: torch.dtype,
-        **extra_weight_attrs,
-    ):
-        if getattr(layer, "tp_size", 1) != 1 or getattr(layer, "ep_size", 1) != 1:
-            raise NotImplementedError("ParoQuant MoE currently supports tp_size=1 and ep_size=1 only.")
-
-        super().create_weights(
-            layer,
-            num_experts,
-            hidden_size,
-            intermediate_size_per_partition,
-            params_dtype,
-            **extra_weight_attrs,
-        )
-
-        krot = self.quant_config.krot
-        rot_specs = [
-            ("gate_up_weight_theta", (krot, hidden_size // 2), torch.float16, torch.zeros),
-            ("gate_up_weight_pairs", (krot, hidden_size), torch.int16, torch.zeros),
-            ("gate_up_weight_channel_scales", (1, hidden_size), torch.float16, torch.ones),
-            (
-                "down_weight_theta",
-                (krot, intermediate_size_per_partition // 2),
-                torch.float16,
-                torch.zeros,
-            ),
-            ("down_weight_pairs", (krot, intermediate_size_per_partition), torch.int16, torch.zeros),
-            ("down_weight_channel_scales", (1, intermediate_size_per_partition), torch.float16, torch.ones),
-        ]
-        for name, shape, dtype, init_fn in rot_specs:
-            layer.register_parameter(
-                name,
-                Parameter(init_fn(shape, dtype=dtype), requires_grad=False),
-            )
-
-    def _apply_activation_and_down_rotation(
-        self,
-        layer: FusedMoE,
-    ):
-        def _activation_func(activation: str, out: torch.Tensor, x: torch.Tensor) -> None:
-            apply_moe_activation(activation, out, x)
-            out.copy_(
-                torch.ops.rotation.rotate(
-                    out,
-                    layer.down_weight_pairs,
-                    layer.down_weight_theta,
-                    layer.down_weight_channel_scales,
-                    self.quant_config.group_size,
-                )
-            )
-
-        return _activation_func
-
-    def apply(
-        self,
-        layer: FusedMoE,
-        x: torch.Tensor,
-        topk_weights: torch.Tensor,
-        topk_ids: torch.Tensor,
-        shared_experts_input: torch.Tensor | None,
-    ) -> torch.Tensor | tuple[torch.Tensor, torch.Tensor]:
-        if getattr(layer, "tp_size", 1) != 1 or getattr(layer, "ep_size", 1) != 1:
-            raise NotImplementedError("ParoQuant MoE currently supports tp_size=1 and ep_size=1 only.")
-
-        x = torch.ops.rotation.rotate(
-            x,
-            layer.gate_up_weight_pairs,
-            layer.gate_up_weight_theta,
-            layer.gate_up_weight_channel_scales,
-            self.quant_config.group_size,
-        )
-
-        return fused_marlin_moe(
-            x,
-            layer.w13_qweight,
-            layer.w2_qweight,
-            getattr(layer, "w13_bias", None),
-            getattr(layer, "w2_bias", None),
-            layer.w13_scales,
-            layer.w2_scales,
-            topk_weights,
-            topk_ids,
-            input_global_scale1=getattr(layer, "w13_input_global_scale", None),
-            input_global_scale2=getattr(layer, "w2_input_global_scale", None),
-            quant_type_id=self.quant_type.id,
-            apply_router_weight_on_input=layer.apply_router_weight_on_input,
-            global_num_experts=layer.global_num_experts,
-            expert_map=layer.expert_map,
-            w1_zeros=layer.w13_qzeros,
-            w2_zeros=layer.w2_qzeros,
-            workspace=layer.workspace,
-            input_dtype=self.input_dtype,
-            activation_func=self._apply_activation_and_down_rotation(layer),
-            inplace=not self.moe.disable_inplace,
-        )
