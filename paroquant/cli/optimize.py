@@ -23,7 +23,7 @@ from paroquant.optim.util import (
     get_blocks,
     get_calib_dataset,
     get_mixed_calib_dataset,
-    catch_first_layer_input,
+    catch_first_layer_input_and_all_layer_kwargs,
     get_named_linears,
     empty_cache,
     logger,
@@ -158,16 +158,16 @@ def main():
     val_samples = torch.stack(val_samples, dim=0).to(device)
 
     # Capture first layer's input.
-    logger.info("Capturing first layer input...")
+    logger.info("Capturing first layer input and layer kwargs...")
     blocks[0].to(device)
-    og_layer_input_batches, kwargs = catch_first_layer_input(
+    og_layer_input_batches, kwargs_list = catch_first_layer_input_and_all_layer_kwargs(
         model,
         blocks,
         samples,
         batch_size=args.batch_size,
     )
     val_batch_size = args.val_batch_size or args.batch_size
-    og_layer_val_input_batches, _ = catch_first_layer_input(
+    og_layer_val_input_batches, _ = catch_first_layer_input_and_all_layer_kwargs(
         model,
         blocks,
         val_samples,
@@ -244,8 +244,12 @@ def main():
         empty_cache()
         logger.info(f"Capturing original layer output...")
         # Original output of this layer.
-        og_layer_output_batches = forward_layer_batch(layer, og_layer_input_batches, kwargs, store_device="cpu")
-        og_layer_val_output_batches = forward_layer_batch(layer, og_layer_val_input_batches, kwargs, store_device="cpu")
+        og_layer_output_batches = forward_layer_batch(
+            layer, og_layer_input_batches, kwargs_list[layer_idx], store_device="cpu"
+        )
+        og_layer_val_output_batches = forward_layer_batch(
+            layer, og_layer_val_input_batches, kwargs_list[layer_idx], store_device="cpu"
+        )
 
         if layer_idx > 0:
             layer_input_batches = new_layer_output_batches
@@ -426,7 +430,7 @@ def main():
                     layer,
                     (train_input_batches, train_output_batches),
                     (val_input_batches, val_output_batches),
-                    kwargs,
+                    kwargs_list[layer_idx],
                     optim_params,
                     loss_fn=args.loss,
                     n_iter=args.epochs[step],
@@ -456,13 +460,13 @@ def main():
         new_layer_output_batches = forward_layer_batch(
             layer,
             layer_input_batches,
-            kwargs,
+            kwargs_list[layer_idx],
             store_device="cpu",
         )
         new_layer_val_output_batches = forward_layer_batch(
             layer,
             layer_val_input_batches,
-            kwargs,
+            kwargs_list[layer_idx],
             store_device="cpu",
         )
 

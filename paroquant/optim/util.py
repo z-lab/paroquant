@@ -11,12 +11,19 @@ import torch
 import torch.nn as nn
 from datasets import load_dataset
 from tqdm import tqdm
-from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
+from contextlib import suppress
 
 
 def get_blocks(model: nn.Module) -> nn.ModuleList:
-    if hasattr(model, "model") and hasattr(model.model, "layers"):
-        return model.model.layers
+    if hasattr(model, "model") and hasattr(model.model, "language_model"):
+        model = model.model.language_model
+    elif hasattr(model, "model"):
+        model = model.model
+
+    if hasattr(model, "layers"):
+        return model.layers
+
     raise NotImplementedError(type(model))
 
 
@@ -60,15 +67,19 @@ def load_tokenizer(model_path: str, **kwargs) -> AutoTokenizer:
 
 
 def move_embed(model, device):
-    if hasattr(model, "model") and hasattr(model.model, "embed_tokens"):
-        model.model.embed_tokens = model.model.embed_tokens.to(device)
+    if hasattr(model, "model") and hasattr(model.model, "language_model"):
+        # AutoModelForCausalLM returns Gemma4ForConditionalGeneration for Gemma 4. Need to unwrap.
+        model = model.model.language_model
+    elif hasattr(model, "model"):
+        model = model.model
     else:
         raise NotImplementedError(type(model))
 
-    if hasattr(model, "model") and hasattr(model.model, "rotary_emb"):
-        model.model.rotary_emb = model.model.rotary_emb.to(device)
-    else:
-        raise NotImplementedError(type(model))
+    if hasattr(model, "embed_tokens"):
+        model.embed_tokens = model.embed_tokens.to(device)
+
+    if hasattr(model, "rotary_emb"):
+        model.rotary_emb = model.rotary_emb.to(device)
 
 
 def empty_cache():
@@ -183,51 +194,67 @@ def get_calib_dataset(
 
 
 @torch.no_grad()
-def catch_first_layer_input(
+def catch_first_layer_input_and_all_layer_kwargs(
     model: nn.Module,
     layers: nn.ModuleList,
     samples: torch.Tensor,
     batch_size: int | None,
-) -> tuple[torch.Tensor, dict]:
-    layer_kwargs = {}
+) -> tuple[torch.Tensor, list[dict]]:
+    kwargs_list: list[dict] = [{} for _ in range(len(layers))]
     batched = batch_size is not None
     inps: list[torch.Tensor] = []
 
     class Catcher(nn.Module):
-        def __init__(self, module):
+
+        def __init__(self, module, layer_idx):
             super().__init__()
             # Bypass __setattr__ of nn.Module
             object.__setattr__(self, "module", module)
+            object.__setattr__(self, "layer_idx", layer_idx)
 
-        def forward(self, inp, **kwargs):
-            inps.append(inp)
+        def forward(self, inp, *args, **kwargs):
+            # We only capture the first input.
+            if self.layer_idx == 0:
+                inps.append(inp)
+
+            # Capture kwargs for all layers.
+            layer_kwargs = kwargs_list[self.layer_idx]
             if len(layer_kwargs) == 0:
                 layer_kwargs.update(kwargs)
-            raise ValueError
+                layer_kwargs.pop("use_cache", None)
+                layer_kwargs.pop("past_key_value", None)
+                layer_kwargs.pop("past_key_values", None)
+
+            # Gemma 4 has an extra `per_layer_input` arg. Ignore it since it's only for multimodal tokens.
+            if len(args) > 0:
+                warnings.warn(f"Silently ignoring additional positional arguments in layer forward: {args}.")
+
+            if self.layer_idx == len(layers) - 1:
+                raise ValueError
+
+            # Return a dummy output
+            return torch.empty_like(inp)
 
         def __getattr__(self, name):
             return getattr(self.module, name)
 
-    layers[0] = Catcher(layers[0])
+    for layer_idx, layer in enumerate(layers):
+        layers[layer_idx] = Catcher(layer, layer_idx)
+
     batch_size = samples.shape[0] if not batched or batch_size <= 0 else batch_size
     num_batches = samples.shape[0] // batch_size
     samples_batch = samples.chunk(num_batches)
     for samples in samples_batch:
-        try:
+        with suppress(ValueError):
             model(samples.to(next(model.parameters()).device))
-        except ValueError:
-            pass
-    layers[0] = layers[0].module
+
+    for layer_idx, layer in enumerate(layers):
+        layers[layer_idx] = layer.module
+
     if not batched:
         inps = inps[0]
 
-    layer_kwargs["use_cache"] = False
-    if "past_key_value" in layer_kwargs:
-        del layer_kwargs["past_key_value"]
-    if "past_key_values" in layer_kwargs:
-        del layer_kwargs["past_key_values"]
-
-    return inps, layer_kwargs
+    return inps, kwargs_list
 
 
 class CachedTensorShards:
