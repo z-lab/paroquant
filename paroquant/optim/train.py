@@ -143,7 +143,6 @@ def optimize_module(
     def loss_batches(input_batches: Iterator[torch.Tensor], output_batches: Iterator[torch.Tensor]) -> torch.Tensor:
         total_loss = None
         for input_batch, output_batch in zip(input_batches, output_batches):
-            # with torch.amp.autocast("cuda"):
             output_q = module_output(input_batch)
             loss_value = loss(output_batch, output_q)
             if total_loss is None:

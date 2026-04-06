@@ -189,7 +189,7 @@ def main():
     ) -> list[torch.Tensor]:
         output_batched = []
 
-        layer.to(device)
+        layer.to(device).to(dtype=dtype)
         for input_batch in input_batched:
             output = layer(input_batch.to(dtype).to(device), **kwargs)
             if isinstance(output, tuple):

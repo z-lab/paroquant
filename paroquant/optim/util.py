@@ -56,7 +56,7 @@ def set_module_by_name(layer, name, new_module):
 
 
 def load_model(model_path: str, device_map: str | None = None, dtype=torch.float32, **kwargs) -> nn.Module:
-    model = AutoModelForCausalLM.from_pretrained(model_path, device_map=device_map, torch_dtype=dtype, **kwargs)
+    model = AutoModelForCausalLM.from_pretrained(model_path, device_map=device_map, dtype=dtype, **kwargs)
     return model
 
 
