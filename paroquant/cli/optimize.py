@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
@@ -9,17 +8,13 @@ from typing import Literal
 import simple_parsing
 import torch
 import torch.nn as nn
-from tqdm import tqdm
 import wandb
+from tqdm import tqdm
+from transformers.models.qwen3_5_moe.modeling_qwen3_5_moe import Qwen3_5MoeExperts
 
-from paroquant.optim.train import (
-    optimize_module,
-    get_random_rotation_pairs,
-)
-from paroquant.optim.qlinear import (
-    PseudoQuantizedLinear,
-    reset_angles_by_mask,
-)
+from paroquant.optim.train import optimize_module, get_random_rotation_pairs
+from paroquant.optim.qlinear import PseudoQuantizedLinear
+from paroquant.optim.qexperts import PseudoQuantizedQwen3_5MoeExperts, get_named_qwen3_5_moe_experts
 from paroquant.optim.util import (
     set_module_by_name,
     load_model,
@@ -28,7 +23,7 @@ from paroquant.optim.util import (
     get_blocks,
     get_calib_dataset,
     get_mixed_calib_dataset,
-    catch_first_layer_input,
+    catch_first_layer_input_and_all_layer_kwargs,
     get_named_linears,
     empty_cache,
     logger,
@@ -163,16 +158,16 @@ def main():
     val_samples = torch.stack(val_samples, dim=0).to(device)
 
     # Capture first layer's input.
-    logger.info("Capturing first layer input...")
+    logger.info("Capturing first layer input and layer kwargs...")
     blocks[0].to(device)
-    og_layer_input_batches, kwargs = catch_first_layer_input(
+    og_layer_input_batches, kwargs_list = catch_first_layer_input_and_all_layer_kwargs(
         model,
         blocks,
         samples,
         batch_size=args.batch_size,
     )
     val_batch_size = args.val_batch_size or args.batch_size
-    og_layer_val_input_batches, _ = catch_first_layer_input(
+    og_layer_val_input_batches, _ = catch_first_layer_input_and_all_layer_kwargs(
         model,
         blocks,
         val_samples,
@@ -194,7 +189,7 @@ def main():
     ) -> list[torch.Tensor]:
         output_batched = []
 
-        layer.to(device)
+        layer.to(device).to(dtype=dtype)
         for input_batch in input_batched:
             output = layer(input_batch.to(dtype).to(device), **kwargs)
             if isinstance(output, tuple):
@@ -209,17 +204,52 @@ def main():
         empty_cache()
         return output_batched
 
-    def set_checkpointing_enabled(module: nn.Module, enable: bool) -> None:
-        for linear in get_named_linears(module, subclass=PseudoQuantizedLinear).values():
-            linear.enable_checkpoint = enable
+    def get_named_optim_modules(layer: nn.Module) -> dict[str, nn.Module]:
+        modules: dict[str, nn.Module] = {}
+        modules.update(get_named_linears(layer))
+        modules.update(get_named_qwen3_5_moe_experts(layer))
+        return modules
+
+    def init_rotation_data(
+        weight: torch.Tensor,
+        *,
+        seed: int,
+        group_size: int,
+        num_rotations: int,
+    ) -> list[torch.Tensor]:
+        weight_grouped = weight.view(weight.shape[0], -1, group_size).permute(1, 0, 2)
+        all_pairs = get_random_rotation_pairs(
+            weight_grouped,
+            group_size=group_size,
+            num_rotations=num_rotations,
+            num_pairs_factor=0.5,
+            seed=seed,
+        )
+        all_pairs = [torch.tensor(pairs, device="cpu", dtype=torch.int32) for pairs in all_pairs]
+        initial_angles = [torch.zeros(pairs.shape[0], device="cpu") for pairs in all_pairs]
+        npairs, angles, mask = transform_to_kernel_data(
+            all_pairs,
+            initial_angles,
+            group_size=group_size,
+        )
+        return [npairs.to(device), angles.to(device), mask.to(device)]
+
+    def set_checkpointing_enabled(pseudo_modules: dict[str, nn.Module], enable: bool) -> None:
+        for pseudo_module in pseudo_modules.values():
+            if hasattr(pseudo_module, "enable_checkpoint"):
+                pseudo_module.enable_checkpoint = enable
 
     # Layerwise, multi-stage optimization.
     for layer_idx, layer in enumerate(tqdm(blocks)):
         empty_cache()
         logger.info(f"Capturing original layer output...")
         # Original output of this layer.
-        og_layer_output_batches = forward_layer_batch(layer, og_layer_input_batches, kwargs, store_device="cpu")
-        og_layer_val_output_batches = forward_layer_batch(layer, og_layer_val_input_batches, kwargs, store_device="cpu")
+        og_layer_output_batches = forward_layer_batch(
+            layer, og_layer_input_batches, kwargs_list[layer_idx], store_device="cpu"
+        )
+        og_layer_val_output_batches = forward_layer_batch(
+            layer, og_layer_val_input_batches, kwargs_list[layer_idx], store_device="cpu"
+        )
 
         if layer_idx > 0:
             layer_input_batches = new_layer_output_batches
@@ -241,10 +271,10 @@ def main():
         for param in layer.parameters():
             param.requires_grad = False
 
-        linear_modules = get_named_linears(layer)
+        optim_modules = get_named_optim_modules(layer)
         if args.resume:
             all_files_exist = True
-            for name in linear_modules.keys():
+            for name in optim_modules.keys():
                 file_name = f"{layer_idx}.{name}.pt"
                 file_path = output_dir / file_name
                 if not file_path.exists() and name not in args.skipped_modules:
@@ -256,62 +286,99 @@ def main():
         if not all_files_exist:
             logger.info(f"Initializing rotation parameters...")
 
-        for name, old_module in linear_modules.items():
+        modules_names_to_optimize = [name for name in optim_modules.keys() if name not in args.skipped_modules]
+        skipped_module_names = [name for name in optim_modules.keys() if name in args.skipped_modules]
+        logger.info(f"Modules to optimize: {modules_names_to_optimize}")
+        logger.info(f"Skipped modules: {skipped_module_names}")
+
+        named_pseudo_modules: dict[str, nn.Module] = {}
+        for name, old_module in optim_modules.items():
             if name in args.skipped_modules:
                 continue
 
             if all_files_exist:
                 existing_result_file = output_dir / f"{layer_idx}.{name}.pt"
                 sd = torch.load(existing_result_file, map_location=device)
-                new_module = PseudoQuantizedLinear.from_state_dict(sd)
-                set_module_by_name(layer, name, new_module)
+                if isinstance(old_module, nn.Linear):
+                    new_module = PseudoQuantizedLinear.from_state_dict(sd)
+                    set_module_by_name(layer, name, new_module)
+                elif isinstance(old_module, Qwen3_5MoeExperts):
+                    new_module = PseudoQuantizedQwen3_5MoeExperts.from_state_dict(sd, old_module, device)
+                    set_module_by_name(layer, name, new_module)
+                else:
+                    raise NotImplementedError(f"Unsupported module type: {type(old_module)}")
+                named_pseudo_modules[name] = new_module
                 continue
 
             old_module.to(device)
+            if isinstance(old_module, nn.Linear):
+                weight = old_module.weight.float()
+                rotation_pairs = init_rotation_data(
+                    weight,
+                    seed=args.seed + layer_idx,
+                    group_size=args.group_size,
+                    num_rotations=args.num_rotations,
+                )
+                channel_scales = torch.ones(1, weight.shape[1], dtype=torch.float16, device=device)
 
-            num_pairs_factor = 0.5
-            weight = old_module.weight.float()
-            weight_grouped = weight.view(weight.shape[0], -1, args.group_size).permute(1, 0, 2)
+                new_module = PseudoQuantizedLinear(
+                    old_module,
+                    rotation_pairs,
+                    channel_scales,
+                    group_size=args.group_size,
+                    n_bits=args.n_bit,
+                    num_rotations=args.num_rotations,
+                )
+                set_module_by_name(layer, name, new_module)
+            elif isinstance(old_module, Qwen3_5MoeExperts):
+                gate_up = old_module.gate_up_proj.float().view(-1, old_module.gate_up_proj.shape[-1])
+                down = old_module.down_proj.float().view(-1, old_module.down_proj.shape[-1])
+                gate_up_rotation_pairs = init_rotation_data(
+                    gate_up,
+                    seed=args.seed + layer_idx,
+                    group_size=args.group_size,
+                    num_rotations=args.num_rotations,
+                )
+                down_rotation_pairs = init_rotation_data(
+                    down,
+                    seed=args.seed + layer_idx + 97,
+                    group_size=args.group_size,
+                    num_rotations=args.num_rotations,
+                )
+                gate_up_channel_scales = torch.ones(
+                    1,
+                    gate_up.shape[1],
+                    dtype=old_module.gate_up_proj.dtype,
+                    device=device,
+                )
+                down_channel_scales = torch.ones(
+                    1,
+                    down.shape[1],
+                    dtype=old_module.down_proj.dtype,
+                    device=device,
+                )
 
-            all_pairs = get_random_rotation_pairs(
-                weight_grouped,
-                group_size=args.group_size,
-                num_rotations=args.num_rotations,
-                num_pairs_factor=num_pairs_factor,
-                seed=args.seed + layer_idx + hash(name),
-            )
+                new_module = PseudoQuantizedQwen3_5MoeExperts(
+                    old_module,
+                    gate_up_rotation_pairs,
+                    down_rotation_pairs,
+                    gate_up_channel_scales,
+                    down_channel_scales,
+                    group_size=args.group_size,
+                    n_bits=args.n_bit,
+                    num_rotations=args.num_rotations,
+                )
+                set_module_by_name(layer, name, new_module)
+            else:
+                raise NotImplementedError(f"Unsupported module type: {type(old_module)}")
 
-            all_pairs = [torch.tensor(pairs, device="cpu", dtype=torch.int32) for pairs in all_pairs]
-            initial_angles = [torch.zeros(pairs.shape[0], device="cpu") for pairs in all_pairs]
-            initial_scales = torch.ones(1, weight.shape[1], dtype=torch.float16, device=device)
-
-            npairs, angles, mask = transform_to_kernel_data(
-                all_pairs,
-                initial_angles,
-                group_size=args.group_size,
-            )
-            npairs = npairs.to(device)
-            angles = angles.to(device)
-            mask = mask.to(device)
-            rotation_pairs = [npairs, angles, mask]
-            channel_scales = initial_scales
-
-            new_module = PseudoQuantizedLinear(
-                old_module,
-                rotation_pairs,
-                channel_scales,
-                group_size=args.group_size,
-                n_bits=args.n_bit,
-                num_rotations=args.num_rotations,
-            )
-
-            set_module_by_name(layer, name, new_module)
+            named_pseudo_modules[name] = new_module
             old_module.cpu()
 
         if not all_files_exist:
             layer.to(device).float()
 
-            set_checkpointing_enabled(layer, args.checkpointing)
+            set_checkpointing_enabled(named_pseudo_modules, args.checkpointing)
             layer_step = 0
             wandb_metric_logger = None
             if wandb_run is not None:
@@ -331,11 +398,15 @@ def main():
 
                 wandb_metric_logger = _wandb_layer_logger
 
+            def _reset_named_angles(_: nn.Module) -> None:
+                for pseudo_module in named_pseudo_modules.values():
+                    if hasattr(pseudo_module, "reset_angles_by_mask"):
+                        pseudo_module.reset_angles_by_mask()
+
             for step, step_params_dict in enumerate(params_to_optimize):
                 empty_cache()
                 optim_params = []
-                new_modules = get_named_linears(layer, subclass=PseudoQuantizedLinear)
-                for new_module in new_modules.values():
+                for new_module in named_pseudo_modules.values():
                     new_module.set_optim_enabled(
                         **{param_name: True for param_name in step_params_dict.keys()},
                     )
@@ -359,18 +430,18 @@ def main():
                     layer,
                     (train_input_batches, train_output_batches),
                     (val_input_batches, val_output_batches),
-                    kwargs,
+                    kwargs_list[layer_idx],
                     optim_params,
                     loss_fn=args.loss,
                     n_iter=args.epochs[step],
                     gradient_accumulation_steps=args.gradient_accumulation_steps,
                     early_stop=None,
-                    post_optim_callback=reset_angles_by_mask,
+                    post_optim_callback=_reset_named_angles,
                     metric_logger=wandb_metric_logger,
                     start_step=layer_step,
                 )
 
-            set_checkpointing_enabled(layer, False)
+            set_checkpointing_enabled(named_pseudo_modules, False)
 
             del (
                 train_input_batches,
@@ -389,13 +460,13 @@ def main():
         new_layer_output_batches = forward_layer_batch(
             layer,
             layer_input_batches,
-            kwargs,
+            kwargs_list[layer_idx],
             store_device="cpu",
         )
         new_layer_val_output_batches = forward_layer_batch(
             layer,
             layer_val_input_batches,
-            kwargs,
+            kwargs_list[layer_idx],
             store_device="cpu",
         )
 
@@ -407,7 +478,7 @@ def main():
             continue
 
         # Save the optimized result
-        for name, module in get_named_linears(layer, subclass=PseudoQuantizedLinear).items():
+        for name, module in named_pseudo_modules.items():
             result_file = output_dir / f"{layer_idx}.{name}.pt"
             torch.save(
                 module.state_dict(),
