@@ -48,9 +48,9 @@ def _convert_awq_linear(weights: dict, prefix: str, group_size: int) -> dict:
     qw = np.array(weights[f"{prefix}qweight"])
     weight = mx.array(_pack_mlx(_unpack_and_reorder(qw).T))
     scales_np = np.array(weights[f"{prefix}scales"]).astype(np.float32)
-    scales = mx.array(scales_np.T.copy())
+    scales = mx.array(scales_np.astype(np.float16).T.copy())
     zeros = _unpack_and_reorder(np.array(weights[f"{prefix}qzeros"])).astype(np.float32)
-    biases = mx.array((-scales_np * zeros).T.copy().astype(np.float16))
+    biases = mx.array((-scales_np * zeros).astype(np.float16).T.copy())
     return {"weight": weight, "scales": scales, "biases": biases}
 
 
