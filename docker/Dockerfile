@@ -1,10 +1,10 @@
-ARG CUDA_VERSION=13.0.2
-FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu22.04 AS base
+ARG CUDA_VERSION=13.1.2
+FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu24.04 AS base
 
 LABEL org.opencontainers.image.source=https://github.com/z-lab/paroquant
 LABEL org.opencontainers.image.licenses=MIT
 
-ARG PYTHON_VERSION=3.12
+ARG PYTHON_VERSION=3.14
 
 ENV DEBIAN_FRONTEND=noninteractive
 WORKDIR /app
@@ -48,11 +48,11 @@ ARG CUDA_TOOLKIT=""
 COPY . .
 RUN --mount=type=cache,target=/root/.cache/pip \
     if [ -n "$VLLM_VERSION" ] && [ -n "$CUDA_TOOLKIT" ]; then \
-        pip install -e ".[vllm]" "vllm==${VLLM_VERSION}" \
+        pip install --no-cache-dir -e ".[vllm]" "vllm==${VLLM_VERSION}" \
             --extra-index-url "https://wheels.vllm.ai/${VLLM_VERSION}/${CUDA_TOOLKIT}" \
             --extra-index-url "https://download.pytorch.org/whl/${CUDA_TOOLKIT}"; \
     else \
-        pip install -e ".[vllm]"; \
+        pip install --no-cache-dir -e ".[vllm]"; \
     fi
 ENV TRITON_PTXAS_PATH=/usr/local/cuda/bin/ptxas
 ENV TRITON_PTXAS_BLACKWELL_PATH=/usr/local/cuda/bin/ptxas
@@ -66,11 +66,11 @@ ARG CUDA_TOOLKIT=""
 COPY . .
 RUN --mount=type=cache,target=/root/.cache/pip \
     if [ -n "$VLLM_VERSION" ] && [ -n "$CUDA_TOOLKIT" ]; then \
-        pip install -e ".[vllm]" "vllm==${VLLM_VERSION}" \
+        pip install --no-cache-dir -e ".[vllm]" "vllm==${VLLM_VERSION}" \
             --extra-index-url "https://wheels.vllm.ai/${VLLM_VERSION}/${CUDA_TOOLKIT}" \
             --extra-index-url "https://download.pytorch.org/whl/${CUDA_TOOLKIT}"; \
     else \
-        pip install -e ".[vllm]"; \
+        pip install --no-cache-dir -e ".[vllm]"; \
     fi
 ENV TRITON_PTXAS_PATH=/usr/local/cuda/bin/ptxas
 ENV TRITON_PTXAS_BLACKWELL_PATH=/usr/local/cuda/bin/ptxas
@@ -87,6 +87,6 @@ CMD ["/bin/bash"]
 FROM base AS eval
 COPY . .
 RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install -r ./experiments/tasks/reasoning/requirements.txt
-RUN pip install -e . --no-cache-dir --no-deps
+    pip install --no-cache-dir -r ./experiments/tasks/reasoning/requirements.txt
+RUN pip install --no-cache-dir -e . --no-deps
 CMD ["/bin/bash"]
