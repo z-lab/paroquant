@@ -4,13 +4,12 @@ FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu24.04 AS base
 LABEL org.opencontainers.image.source=https://github.com/z-lab/paroquant
 LABEL org.opencontainers.image.licenses=MIT
 
-ARG PYTHON_VERSION=3.14
+ARG PYTHON_VERSION=3.12
 
 ENV DEBIAN_FRONTEND=noninteractive
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    software-properties-common \
     build-essential \
     git \
     curl \
@@ -21,9 +20,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libsm6 \
     libxext6 \
     libgl1 \
-    && add-apt-repository -y ppa:deadsnakes/ppa \
-    && apt-get update \
-    && apt-get install -y --no-install-recommends \
     python${PYTHON_VERSION} \
     python${PYTHON_VERSION}-dev \
     python${PYTHON_VERSION}-venv \

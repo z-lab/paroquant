@@ -184,18 +184,14 @@ def main():
         input_batched: list[torch.Tensor],
         kwargs: dict,
         store_device: torch.device,
-        dtype: torch.dtype = torch.float16,
-        cast_to_dtype: torch.dtype = torch.float16,
     ) -> list[torch.Tensor]:
         output_batched = []
 
-        layer.to(device).to(dtype=dtype)
+        layer.to(device)
         for input_batch in input_batched:
-            output = layer(input_batch.to(dtype).to(device), **kwargs)
+            output = layer(input_batch.to(device=device), **kwargs)
             if isinstance(output, tuple):
                 output = output[0]
-            if output.dtype != cast_to_dtype:
-                output = output.to(cast_to_dtype)
             if output.device != store_device:
                 output = output.to(store_device)
             output_batched.append(output)
