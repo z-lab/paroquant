@@ -2,7 +2,7 @@
 
 **Pairwise Rotation Quantization for Efficient Reasoning LLM Inference**
 
-<p align="center">
+<p>
   <a href="https://arxiv.org/abs/2511.10645"><img src="https://img.shields.io/badge/arXiv-2511.10645-b31b1b.svg" alt="Paper"></a>
   <a href="https://paroquant.z-lab.ai"><img src="https://img.shields.io/badge/Blog-ParoQuant-blue" alt="Blog"></a>
   <a href="https://huggingface.co/collections/z-lab/paroquant"><img src="https://img.shields.io/badge/%F0%9F%A4%97-Models-yellow" alt="Models"></a>
@@ -10,12 +10,6 @@
 </p>
 
 State-of-the-art INT4 quantization for LLMs. ParoQuant uses learned pairwise rotations to suppress weight outliers, closing the accuracy gap with FP16 while running at near-AWQ speed. Supports NVIDIA GPUs (vLLM, Transformers) and Apple Silicon (MLX).
-
-<p align="center">
-  <a href="https://youtu.be/fISG4CkizLM">
-    <img src="https://img.youtube.com/vi/fISG4CkizLM/maxresdefault.jpg" width="80%">
-  </a>
-</p>
 
 ## Quick Start
 
@@ -82,6 +76,13 @@ All models are available on [Hugging Face](https://huggingface.co/collections/z-
 | Model          | Checkpoint                                                                      |
 | -------------- | ------------------------------------------------------------------------------- |
 | gemma-4-31B-it | [`z-lab/gemma-4-31B-it-PARO`](https://huggingface.co/z-lab/gemma-4-31B-it-PARO) |
+| gemma-4-E2B-it | [`z-lab/gemma-4-E2B-it-PARO`](https://huggingface.co/z-lab/gemma-4-E2B-it-PARO) |
+
+**Qwen3.6**
+
+| Model       | Checkpoint                                                                |
+| ----------- | ------------------------------------------------------------------------- |
+| Qwen3.6-27B | [`z-lab/Qwen3.6-27B-PARO`](https://huggingface.co/z-lab/Qwen3.6-27B-PARO) |
 
 **Qwen3.5**
 
