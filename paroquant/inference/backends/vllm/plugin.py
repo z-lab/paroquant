@@ -30,6 +30,26 @@ _QUANT_TYPE = {4: scalar_types.uint4}
 _MARLIN_TILE_N = 64
 
 
+def _maybe_shard_input(target: torch.Tensor, loaded_weight: torch.Tensor) -> torch.Tensor:
+    """Slice loaded_weight along its last (input) dim if param is sharded for TP.
+
+    Rotation params live along the linear layer's input dim. For row-parallel
+    layers the param is allocated with input_size_per_partition = full // tp,
+    while the on-disk weight is full size — slice it by tp_rank.
+    """
+    if target.shape[-1] == loaded_weight.shape[-1]:
+        return loaded_weight
+    if loaded_weight.shape[-1] % target.shape[-1] != 0:
+        raise ValueError(
+            f"ParoQuant rotation loader: incompatible shapes "
+            f"target={tuple(target.shape)} loaded={tuple(loaded_weight.shape)}"
+        )
+    from vllm.distributed import get_tensor_model_parallel_rank
+    tp_rank = get_tensor_model_parallel_rank()
+    shard = target.shape[-1]
+    return loaded_weight.narrow(-1, tp_rank * shard, shard)
+
+
 def _rotation_weight_loader(
     param: Parameter,
     loaded_weight: torch.Tensor,
@@ -45,14 +65,15 @@ def _rotation_weight_loader(
     """
     if loaded_shard_id is None:
         target = param.data[0] if param.data.dim() > loaded_weight.dim() else param.data
-        target.copy_(loaded_weight)
+        target.copy_(_maybe_shard_input(target, loaded_weight))
         return
 
     indices = (
         loaded_shard_id if isinstance(loaded_shard_id, tuple) else (_SHARD_INDEX.get(loaded_shard_id, loaded_shard_id),)
     )
     for idx in indices:
-        param.data[idx].copy_(loaded_weight)
+        target = param.data[idx]
+        target.copy_(_maybe_shard_input(target, loaded_weight))
 
 
 @register_quantization_config("paroquant")
