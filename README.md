@@ -42,11 +42,17 @@ python -m paroquant.cli.chat --model $MODEL
 
 ### OpenAI-Compatible API Server
 
+For vLLM, you can directly use `vllm serve` to serve ParoQuant models:
+
+```bash
+vllm serve $MODEL --port 8000
+```
+
+For other frameworks:
+
 ```bash
 python -m paroquant.cli.serve --model $MODEL --port 8000
 ```
-
-For vLLM, the arguments are passed to vLLM directly. See [vLLM docs](https://docs.vllm.ai/en/latest/configuration/serve_args/) for more details.
 
 For MLX, add `--vlm` if you wish to load the VLM components and use the model's multimodal features. For vLLM, VLM components are loaded by default and can be skipped with the server argument `--language-model-only`.
 

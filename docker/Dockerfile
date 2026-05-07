@@ -70,7 +70,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     fi
 ENV TRITON_PTXAS_PATH=/usr/local/cuda/bin/ptxas
 ENV TRITON_PTXAS_BLACKWELL_PATH=/usr/local/cuda/bin/ptxas
-ENTRYPOINT ["python", "-m", "paroquant.cli.serve"]
+ENTRYPOINT ["vllm", "serve"]
 
 # ---- optim: optimization & evaluation ----
 FROM base AS optim
