@@ -19,6 +19,9 @@ Homepage = "https://paroquant.z-lab.ai"
 Paper = "https://arxiv.org/abs/2511.10645"
 Models = "https://huggingface.co/collections/z-lab/paroquant"
 
+[project.entry-points."vllm.general_plugins"]
+paroquant = "paroquant.inference.backends.vllm:register"
+
 [project.optional-dependencies]
 transformers = [
     "torch>=2.8",
