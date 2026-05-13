@@ -10,7 +10,7 @@ import torch
 import torch.nn as nn
 from tqdm import tqdm
 
-from .util import CosineAnnealingParam, logger
+from .util import CosineAnnealingParam, RETAINED_KWARG_KEYS, logger, to_device
 
 
 def _get_independent_channel_pairs(
@@ -93,9 +93,10 @@ def get_random_rotation_pairs(
 
 def optimize_module(
     module: nn.Module,
-    train_set_batches: tuple[Iterator[torch.Tensor], Iterator[torch.Tensor]],
-    val_set_batches: tuple[Iterator[torch.Tensor], Iterator[torch.Tensor]],
-    kwargs: dict,
+    train_set_batches: tuple[Iterator[tuple[torch.Tensor, ...]], Iterator[torch.Tensor]],
+    val_set_batches: tuple[Iterator[tuple[torch.Tensor, ...]], Iterator[torch.Tensor]],
+    train_kwargs: dict | list[dict],
+    val_kwargs: dict | list[dict],
     optim_params: list[dict],
     *,
     loss_fn: Literal["mse", "smooth_l1"],
@@ -106,13 +107,13 @@ def optimize_module(
     metric_logger: Callable[[dict[str, float], int], None] | None = None,
     start_step: int = 0,
 ) -> int:
-    train_input_batches, train_output_batches = train_set_batches
-    val_input_batches, val_output_batches = val_set_batches
+    train_args_batches, train_output_batches = train_set_batches
+    val_args_batches, val_output_batches = val_set_batches
 
     if gradient_accumulation_steps <= 0:
         raise ValueError(f"gradient_accumulation_steps must be a positive integer, got {gradient_accumulation_steps}")
 
-    num_train_batches = len(train_input_batches)
+    num_train_batches = len(train_args_batches)
     total_steps = n_iter * math.ceil(num_train_batches / gradient_accumulation_steps)
     schedulers = [
         CosineAnnealingParam(
@@ -133,26 +134,37 @@ def optimize_module(
 
     progress_bar = tqdm(total=n_iter, unit="iter")
 
-    def module_output(input: torch.Tensor) -> torch.Tensor:
-        out = module(input, **kwargs)
+    def module_output(args: tuple[torch.Tensor, ...], kwargs: dict | list[dict], batch_idx: int) -> torch.Tensor:
+        batch_kwargs = kwargs
+        if isinstance(kwargs, list):
+            batch_kwargs = {
+                key: value.copy() if isinstance(value, dict) else value for key, value in kwargs[batch_idx].items()
+            }
+            for key in RETAINED_KWARG_KEYS:
+                if key in batch_kwargs:
+                    batch_kwargs[key] = to_device(batch_kwargs[key], args[0].device)
+        out = module(*args, **batch_kwargs)
         if isinstance(out, tuple):
             out = out[0]
         return out
 
     @torch.no_grad()
-    def loss_batches(input_batches: Iterator[torch.Tensor], output_batches: Iterator[torch.Tensor]) -> torch.Tensor:
+    def val_loss_batches(
+        args_batches: Iterator[tuple[torch.Tensor, ...]],
+        output_batches: Iterator[torch.Tensor],
+    ) -> torch.Tensor:
         total_loss = None
-        for input_batch, output_batch in zip(input_batches, output_batches):
-            output_q = module_output(input_batch)
+        for batch_idx, (args_batch, output_batch) in enumerate(zip(args_batches, output_batches)):
+            output_q = module_output(args_batch, val_kwargs, batch_idx)
             loss_value = loss(output_batch, output_q)
             if total_loss is None:
                 total_loss = loss_value
             else:
                 total_loss += loss_value
-        return total_loss / len(input_batches)
+        return total_loss / len(args_batches)
 
     with torch.no_grad(), torch.amp.autocast("cuda"):
-        original_val_loss = loss_batches(val_input_batches, val_output_batches)
+        original_val_loss = val_loss_batches(val_args_batches, val_output_batches)
 
     best_val_loss = original_val_loss
     best_sd = deepcopy(module.state_dict())
@@ -173,8 +185,8 @@ def optimize_module(
         accum_counter = 0
         accum_loss = 0.0
         window_size = min(gradient_accumulation_steps, num_train_batches)
-        for batch_idx, (input_batch, output_batch) in enumerate(
-            zip(train_input_batches, train_output_batches),
+        for batch_idx, (args_batch, output_batch) in enumerate(
+            zip(train_args_batches, train_output_batches),
             start=1,
         ):
             if accum_counter == 0:
@@ -182,7 +194,7 @@ def optimize_module(
                 window_size = min(gradient_accumulation_steps, remaining_batches)
 
             with torch.amp.autocast("cuda"):
-                output_q = module_output(input_batch)
+                output_q = module_output(args_batch, train_kwargs, batch_idx - 1)
                 batch_loss = loss(output_batch, output_q)
                 loss_value = batch_loss / window_size
 
@@ -208,7 +220,7 @@ def optimize_module(
                 accum_loss = 0.0
 
         with torch.no_grad(), torch.amp.autocast("cuda"):
-            val_loss_value = loss_batches(val_input_batches, val_output_batches)
+            val_loss_value = val_loss_batches(val_args_batches, val_output_batches)
 
         if val_loss_value < best_val_loss:
             best_val_loss = val_loss_value

@@ -82,6 +82,7 @@ All models are available on [Hugging Face](https://huggingface.co/collections/z-
 | Model          | Checkpoint                                                                      |
 | -------------- | ------------------------------------------------------------------------------- |
 | gemma-4-31B-it | [`z-lab/gemma-4-31B-it-PARO`](https://huggingface.co/z-lab/gemma-4-31B-it-PARO) |
+| gemma-4-E4B-it | [`z-lab/gemma-4-E4B-it-PARO`](https://huggingface.co/z-lab/gemma-4-E4B-it-PARO) |
 | gemma-4-E2B-it | [`z-lab/gemma-4-E2B-it-PARO`](https://huggingface.co/z-lab/gemma-4-E2B-it-PARO) |
 
 **Qwen3.6**

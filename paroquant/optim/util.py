@@ -12,7 +12,21 @@ import torch.nn as nn
 from datasets import load_dataset
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer, AutoConfig
-from contextlib import suppress
+
+
+RETAINED_KWARG_KEYS = ("shared_kv_states",)
+
+
+def to_device(value, device: torch.device | str):
+    if isinstance(value, torch.Tensor):
+        return value.to(device)
+    if isinstance(value, list):
+        return [to_device(v, device) for v in value]
+    if isinstance(value, tuple):
+        return tuple(to_device(v, device) for v in value)
+    if isinstance(value, dict):
+        return {k: to_device(v, device) for k, v in value.items()}
+    return value
 
 
 def get_blocks(model: nn.Module) -> nn.ModuleList:
@@ -75,11 +89,18 @@ def move_embed(model, device):
     else:
         raise NotImplementedError(type(model))
 
-    if hasattr(model, "embed_tokens"):
-        model.embed_tokens = model.embed_tokens.to(device)
+    def _move(module_name):
+        module = getattr(model, module_name, None)
+        if module is not None:
+            module.to(device)
 
-    if hasattr(model, "rotary_emb"):
-        model.rotary_emb = model.rotary_emb.to(device)
+    _move("embed_tokens")
+    _move("rotary_emb")
+
+    # Gemma 4
+    _move("embed_tokens_per_layer")
+    _move("per_layer_model_projection")
+    _move("per_layer_projection_norm")
 
 
 def empty_cache():
@@ -194,15 +215,17 @@ def get_calib_dataset(
 
 
 @torch.no_grad()
-def catch_first_layer_input_and_all_layer_kwargs(
+def capture_layer_inputs_and_args(
     model: nn.Module,
     layers: nn.ModuleList,
     samples: torch.Tensor,
     batch_size: int | None,
-) -> tuple[torch.Tensor, list[dict]]:
+) -> tuple[list[torch.Tensor], list[dict], list[list[tuple[torch.Tensor, ...]]], list[dict]]:
+    device = samples.device
     kwargs_list: list[dict] = [{} for _ in range(len(layers))]
-    batched = batch_size is not None
-    inps: list[torch.Tensor] = []
+    first_layer_input_batches: list[torch.Tensor] = []
+    other_args_batches_list: list[list[tuple[torch.Tensor, ...]]] = [[] for _ in range(len(layers))]
+    retained_kwargs_batches: list[dict] = []
 
     class Catcher(nn.Module):
 
@@ -212,28 +235,26 @@ def catch_first_layer_input_and_all_layer_kwargs(
             object.__setattr__(self, "module", module)
             object.__setattr__(self, "layer_idx", layer_idx)
 
-        def forward(self, inp, *args, **kwargs):
-            # We only capture the first input.
+        def forward(self, *args, **kwargs):
             if self.layer_idx == 0:
-                inps.append(inp)
+                first_layer_input_batches.append(args[0].cpu())
 
             # Capture kwargs for all layers.
             layer_kwargs = kwargs_list[self.layer_idx]
             if len(layer_kwargs) == 0:
-                layer_kwargs.update(kwargs)
+                layer_kwargs.update({k: v for k, v in kwargs.items() if k not in RETAINED_KWARG_KEYS})
                 layer_kwargs.pop("use_cache", None)
                 layer_kwargs.pop("past_key_value", None)
                 layer_kwargs.pop("past_key_values", None)
 
-            # Gemma 4 has an extra `per_layer_input` arg. Ignore it since it's only for multimodal tokens.
-            if len(args) > 0:
-                warnings.warn(f"Silently ignoring additional positional arguments in layer forward: {args}.")
+            other_args_batches_list[self.layer_idx].append(
+                tuple(arg.cpu() if isinstance(arg, torch.Tensor) else arg for arg in args[1:])
+            )
+            retained_kwargs = {k: to_device(kwargs[k], "cpu") for k in RETAINED_KWARG_KEYS if k in kwargs}
+            if self.layer_idx == 0:
+                retained_kwargs_batches.append(retained_kwargs)
 
-            if self.layer_idx == len(layers) - 1:
-                raise ValueError
-
-            # Return a dummy output
-            return torch.empty_like(inp)
+            return torch.empty_like(args[0], device=device)
 
         def __getattr__(self, name):
             return getattr(self.module, name)
@@ -241,39 +262,51 @@ def catch_first_layer_input_and_all_layer_kwargs(
     for layer_idx, layer in enumerate(layers):
         layers[layer_idx] = Catcher(layer, layer_idx)
 
-    batch_size = samples.shape[0] if not batched or batch_size <= 0 else batch_size
+    batch_size = samples.shape[0] if batch_size is None or batch_size <= 0 else batch_size
     num_batches = samples.shape[0] // batch_size
     samples_batch = samples.chunk(num_batches)
     for samples in samples_batch:
-        with suppress(ValueError):
-            model(samples.to(next(model.parameters()).device))
+        model(samples)
 
     for layer_idx, layer in enumerate(layers):
         layers[layer_idx] = layer.module
 
-    if not batched:
-        inps = inps[0]
+    return (
+        first_layer_input_batches,
+        kwargs_list,
+        other_args_batches_list,
+        retained_kwargs_batches,
+    )
 
-    return inps, kwargs_list
+
+def _move_tensor_batch(batch, device: torch.device | str) -> torch.Tensor | tuple[torch.Tensor, ...]:
+    return to_device(batch, device)
+
+
+def _tensor_batch_device(batch) -> torch.device:
+    if isinstance(batch, tuple):
+        return batch[0].device
+    return batch.device
 
 
 class CachedTensorShards:
+
     def __init__(
         self,
-        batches: list[torch.Tensor],
+        batches: list[torch.Tensor] | list[tuple[torch.Tensor, ...]],
         num_shards: int,
         *,
-        target_device: torch.device,
-        offload_device: torch.device = torch.device("cpu"),
+        target_device: torch.device | str,
+        offload_device: torch.device | str = torch.device("cpu"),
     ):
         assert len(batches) % num_shards == 0
-        if batches[0].device != offload_device:
-            self.batches = [b.to(offload_device) for b in batches]
+        if _tensor_batch_device(batches[0]) != offload_device:
+            self.batches = [_move_tensor_batch(b, offload_device) for b in batches]
         else:
             self.batches = batches
         self.num_shards = num_shards
         self.current_shard: int = None
-        self.cached_shard: list[torch.Tensor] = None
+        self.cached_shard: list[torch.Tensor] | list[tuple[torch.Tensor, ...]] = None
         self.target_device = target_device
 
     def _switch_shard(self, shard_index: int) -> None:
@@ -282,7 +315,7 @@ class CachedTensorShards:
         self.current_shard = shard_index
         start, end = self._get_shard_range(shard_index)
         self.cached_shard = self.batches[start:end]
-        self.cached_shard = [b.to(self.target_device) for b in self.cached_shard]
+        self.cached_shard = [_move_tensor_batch(b, self.target_device) for b in self.cached_shard]
 
     def _get_shard_range(self, index: int) -> tuple[int, int]:
         if self.num_shards == 1:
@@ -295,7 +328,7 @@ class CachedTensorShards:
             end = shard_size * (index + 1)
         return start, end
 
-    def __getitem__(self, index: int) -> torch.Tensor:
+    def __getitem__(self, index: int) -> torch.Tensor | tuple[torch.Tensor, ...]:
         shard_len = len(self.batches) // self.num_shards
         shard_index = index // shard_len
         if self.current_shard != shard_index:
@@ -317,7 +350,7 @@ class CachedTensorShards:
         def __iter__(self):
             return self
 
-        def __next__(self) -> torch.Tensor:
+        def __next__(self) -> torch.Tensor | tuple[torch.Tensor, ...]:
             if self.current_index >= len(self.batches):
                 raise StopIteration
             result = self.batches[self.current_index]

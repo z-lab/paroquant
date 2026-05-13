@@ -25,12 +25,11 @@ class PseudoQuantizedLinear(nn.Module):
     ) -> None:
         super().__init__()
         self.enable_checkpoint = False
-        self.weight = nn.Parameter(linear.weight.clone())
+        self.weight = nn.Parameter(linear.weight.half().clone())
         self.in_feat = self.weight.shape[1]
         self.out_feat = self.weight.shape[0]
         num_groups = self.in_feat // group_size
         assert self.in_feat % group_size == 0
-        assert self.weight.dtype == torch.float16 or self.weight.dtype == torch.float32
         if rotation_pairs is not None:
             pairs_grouped, angles_grouped, mask = rotation_pairs
             assert pairs_grouped.size(0) == num_rotations
