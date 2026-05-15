@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
@@ -10,11 +11,10 @@ import torch
 import torch.nn as nn
 import wandb
 from tqdm import tqdm
-from transformers.models.qwen3_5_moe.modeling_qwen3_5_moe import Qwen3_5MoeExperts
 
 from paroquant.optim.train import optimize_module, get_random_rotation_pairs
 from paroquant.optim.qlinear import PseudoQuantizedLinear
-from paroquant.optim.qexperts import PseudoQuantizedQwen3_5MoeExperts, get_named_qwen3_5_moe_experts
+from paroquant.optim.qexperts import PseudoQuantizedMoEExperts, get_named_moe_experts, is_fused_moe_experts
 from paroquant.optim.util import (
     set_module_by_name,
     load_model,
@@ -23,11 +23,13 @@ from paroquant.optim.util import (
     get_blocks,
     get_calib_dataset,
     get_mixed_calib_dataset,
-    catch_first_layer_input_and_all_layer_kwargs,
+    capture_layer_inputs_and_args,
     get_named_linears,
     empty_cache,
     logger,
     CachedTensorShards,
+    RETAINED_KWARG_KEYS,
+    to_device,
 )
 from paroquant.optim.rotation import transform_to_kernel_data
 
@@ -131,7 +133,7 @@ def main():
         json.dump(vars(args), f, indent=2)
 
     # Load model.
-    model = load_model(args.model, device_map="cpu", dtype=torch.float16)
+    model = load_model(args.model, device_map="cpu", dtype=torch.float16).half()
     move_embed(model, device)
     tokenizer = load_tokenizer(args.model)
     blocks = get_blocks(model)
@@ -157,23 +159,37 @@ def main():
     )
     val_samples = torch.stack(val_samples, dim=0).to(device)
 
-    # Capture first layer's input.
-    logger.info("Capturing first layer input and layer kwargs...")
-    blocks[0].to(device)
-    og_layer_input_batches, kwargs_list = catch_first_layer_input_and_all_layer_kwargs(
+    # Capture per-batch positional args and layer kwargs.
+    logger.info("Capturing layer positional args and kwargs...")
+    model.to(device)
+    (
+        og_layer_input_batches,
+        kwargs_list,
+        other_args_batches_list,
+        og_retained_kwargs_batches,
+    ) = capture_layer_inputs_and_args(
         model,
         blocks,
         samples,
         batch_size=args.batch_size,
     )
+
     val_batch_size = args.val_batch_size or args.batch_size
-    og_layer_val_input_batches, _ = catch_first_layer_input_and_all_layer_kwargs(
+    (
+        og_layer_val_input_batches,
+        val_kwargs_list,
+        val_other_args_batches_list,
+        og_val_retained_kwargs_batches,
+    ) = capture_layer_inputs_and_args(
         model,
         blocks,
         val_samples,
         batch_size=val_batch_size,
     )
-    blocks[0].cpu()
+    new_retained_kwargs_batches = deepcopy(og_retained_kwargs_batches)
+    new_val_retained_kwargs_batches = deepcopy(og_val_retained_kwargs_batches)
+
+    model.cpu()
 
     del samples
     empty_cache()
@@ -181,30 +197,41 @@ def main():
     @torch.no_grad()
     def forward_layer_batch(
         layer: nn.Module,
-        input_batched: list[torch.Tensor],
+        args_batched: list[tuple[torch.Tensor, ...]],
+        *,
         kwargs: dict,
-        store_device: torch.device,
+        retained_kwargs_batches: list[dict],
+        store_device: torch.device | str,
     ) -> list[torch.Tensor]:
         output_batched = []
 
         layer.to(device)
-        for input_batch in input_batched:
-            output = layer(input_batch.to(device=device), **kwargs)
+        for batch_idx, args_batch in enumerate(args_batched):
+            batch_kwargs = kwargs.copy()
+            for key in RETAINED_KWARG_KEYS:
+                if key in retained_kwargs_batches[batch_idx]:
+                    batch_kwargs[key] = to_device(retained_kwargs_batches[batch_idx][key], device)
+            output = layer(*to_device(args_batch, device), **batch_kwargs)
             if isinstance(output, tuple):
                 output = output[0]
             if output.device != store_device:
                 output = output.to(store_device)
             output_batched.append(output)
+            for key in RETAINED_KWARG_KEYS:
+                if key in batch_kwargs:
+                    retained_kwargs_batches[batch_idx][key] = to_device(batch_kwargs[key], "cpu")
         layer.cpu()
 
         empty_cache()
         return output_batched
 
-    def get_named_optim_modules(layer: nn.Module) -> dict[str, nn.Module]:
-        modules: dict[str, nn.Module] = {}
-        modules.update(get_named_linears(layer))
-        modules.update(get_named_qwen3_5_moe_experts(layer))
-        return modules
+    def make_layer_args_batches(
+        input_batches: list[torch.Tensor],
+        other_args_batches: list[tuple[torch.Tensor, ...]],
+    ) -> list[tuple[torch.Tensor, ...]]:
+        return [
+            (input_batch, *other_args_batch) for input_batch, other_args_batch in zip(input_batches, other_args_batches)
+        ]
 
     def init_rotation_data(
         weight: torch.Tensor,
@@ -240,34 +267,60 @@ def main():
         empty_cache()
         logger.info(f"Capturing original layer output...")
         # Original output of this layer.
+        og_layer_args_batches = make_layer_args_batches(
+            og_layer_input_batches,
+            other_args_batches_list[layer_idx],
+        )
+        og_layer_val_args_batches = make_layer_args_batches(
+            og_layer_val_input_batches,
+            val_other_args_batches_list[layer_idx],
+        )
         og_layer_output_batches = forward_layer_batch(
-            layer, og_layer_input_batches, kwargs_list[layer_idx], store_device="cpu"
+            layer,
+            og_layer_args_batches,
+            kwargs=kwargs_list[layer_idx],
+            retained_kwargs_batches=og_retained_kwargs_batches,
+            store_device="cpu",
         )
         og_layer_val_output_batches = forward_layer_batch(
-            layer, og_layer_val_input_batches, kwargs_list[layer_idx], store_device="cpu"
+            layer,
+            og_layer_val_args_batches,
+            kwargs=val_kwargs_list[layer_idx],
+            retained_kwargs_batches=og_val_retained_kwargs_batches,
+            store_device="cpu",
         )
 
         if layer_idx > 0:
-            layer_input_batches = new_layer_output_batches
-            layer_val_input_batches = new_layer_val_output_batches
+            layer_args_batches = make_layer_args_batches(
+                new_layer_output_batches,
+                other_args_batches_list[layer_idx],
+            )
+            layer_val_args_batches = make_layer_args_batches(
+                new_layer_val_output_batches,
+                val_other_args_batches_list[layer_idx],
+            )
         else:
-            layer_input_batches = og_layer_input_batches
-            layer_val_input_batches = og_layer_val_input_batches
+            layer_args_batches = og_layer_args_batches
+            layer_val_args_batches = og_layer_val_args_batches
 
-        train_input_batches = layer_input_batches
+        train_args_batches = layer_args_batches
         train_output_batches = og_layer_output_batches
 
-        train_input_batches = CachedTensorShards(train_input_batches, args.cache_shards, target_device=device)
+        train_args_batches = CachedTensorShards(train_args_batches, args.cache_shards, target_device=device)
         train_output_batches = CachedTensorShards(train_output_batches, args.cache_shards, target_device=device)
 
-        val_input_batches = [b.to(device) for b in layer_val_input_batches]
+        val_args_batches = [to_device(args_batch, device) for args_batch in layer_val_args_batches]
         val_output_batches = [b.to(device) for b in og_layer_val_output_batches]
 
         # Freeze all parameters
         for param in layer.parameters():
             param.requires_grad = False
 
-        optim_modules = get_named_optim_modules(layer)
+        linear_modules = get_named_linears(layer)
+        expert_modules = get_named_moe_experts(layer)
+        optim_modules: dict[str, nn.Module] = {}
+        optim_modules.update(linear_modules)
+        optim_modules.update(expert_modules)
         if args.resume:
             all_files_exist = True
             for name in optim_modules.keys():
@@ -282,10 +335,14 @@ def main():
         if not all_files_exist:
             logger.info(f"Initializing rotation parameters...")
 
-        modules_names_to_optimize = [name for name in optim_modules.keys() if name not in args.skipped_modules]
-        skipped_module_names = [name for name in optim_modules.keys() if name in args.skipped_modules]
-        logger.info(f"Modules to optimize: {modules_names_to_optimize}")
-        logger.info(f"Skipped modules: {skipped_module_names}")
+        linear_names_to_optimize = [name for name in linear_modules.keys() if name not in args.skipped_modules]
+        expert_names_to_optimize = [name for name in expert_modules.keys() if name not in args.skipped_modules]
+        skipped_linear_names = [name for name in linear_modules.keys() if name in args.skipped_modules]
+        skipped_expert_names = [name for name in expert_modules.keys() if name in args.skipped_modules]
+        logger.info(f"Linear modules to optimize: {linear_names_to_optimize}")
+        logger.info(f"MoE expert modules to optimize: {expert_names_to_optimize}")
+        logger.info(f"Skipped linear modules: {skipped_linear_names}")
+        logger.info(f"Skipped MoE expert modules: {skipped_expert_names}")
 
         named_pseudo_modules: dict[str, nn.Module] = {}
         for name, old_module in optim_modules.items():
@@ -298,8 +355,8 @@ def main():
                 if isinstance(old_module, nn.Linear):
                     new_module = PseudoQuantizedLinear.from_state_dict(sd)
                     set_module_by_name(layer, name, new_module)
-                elif isinstance(old_module, Qwen3_5MoeExperts):
-                    new_module = PseudoQuantizedQwen3_5MoeExperts.from_state_dict(sd, old_module, device)
+                elif is_fused_moe_experts(old_module):
+                    new_module = PseudoQuantizedMoEExperts.from_state_dict(sd, old_module, device)
                     set_module_by_name(layer, name, new_module)
                 else:
                     raise NotImplementedError(f"Unsupported module type: {type(old_module)}")
@@ -326,7 +383,7 @@ def main():
                     num_rotations=args.num_rotations,
                 )
                 set_module_by_name(layer, name, new_module)
-            elif isinstance(old_module, Qwen3_5MoeExperts):
+            elif is_fused_moe_experts(old_module):
                 gate_up = old_module.gate_up_proj.float().view(-1, old_module.gate_up_proj.shape[-1])
                 down = old_module.down_proj.float().view(-1, old_module.down_proj.shape[-1])
                 gate_up_rotation_pairs = init_rotation_data(
@@ -354,7 +411,7 @@ def main():
                     device=device,
                 )
 
-                new_module = PseudoQuantizedQwen3_5MoeExperts(
+                new_module = PseudoQuantizedMoEExperts(
                     old_module,
                     gate_up_rotation_pairs,
                     down_rotation_pairs,
@@ -399,6 +456,16 @@ def main():
                     if hasattr(pseudo_module, "reset_angles_by_mask"):
                         pseudo_module.reset_angles_by_mask()
 
+            train_kwargs_batches = [
+                kwargs_list[layer_idx] | {k: retained_kwargs[k] for k in RETAINED_KWARG_KEYS if k in retained_kwargs}
+                for retained_kwargs in new_retained_kwargs_batches
+            ]
+            val_kwargs_batches = [
+                val_kwargs_list[layer_idx]
+                | {k: retained_kwargs[k] for k in RETAINED_KWARG_KEYS if k in retained_kwargs}
+                for retained_kwargs in new_val_retained_kwargs_batches
+            ]
+
             for step, step_params_dict in enumerate(params_to_optimize):
                 empty_cache()
                 optim_params = []
@@ -424,9 +491,10 @@ def main():
 
                 layer_step = optimize_module(
                     layer,
-                    (train_input_batches, train_output_batches),
-                    (val_input_batches, val_output_batches),
-                    kwargs_list[layer_idx],
+                    (train_args_batches, train_output_batches),
+                    (val_args_batches, val_output_batches),
+                    train_kwargs_batches,
+                    val_kwargs_batches,
                     optim_params,
                     loss_fn=args.loss,
                     n_iter=args.epochs[step],
@@ -440,9 +508,9 @@ def main():
             set_checkpointing_enabled(named_pseudo_modules, False)
 
             del (
-                train_input_batches,
+                train_args_batches,
                 train_output_batches,
-                val_input_batches,
+                val_args_batches,
                 val_output_batches,
             )
             empty_cache()
@@ -455,14 +523,16 @@ def main():
         logger.info("Capturing new layer output...")
         new_layer_output_batches = forward_layer_batch(
             layer,
-            layer_input_batches,
-            kwargs_list[layer_idx],
+            layer_args_batches,
+            kwargs=kwargs_list[layer_idx],
+            retained_kwargs_batches=new_retained_kwargs_batches,
             store_device="cpu",
         )
         new_layer_val_output_batches = forward_layer_batch(
             layer,
-            layer_val_input_batches,
-            kwargs_list[layer_idx],
+            layer_val_args_batches,
+            kwargs=val_kwargs_list[layer_idx],
+            retained_kwargs_batches=new_val_retained_kwargs_batches,
             store_device="cpu",
         )
 

@@ -79,47 +79,47 @@ All models are available on [Hugging Face](https://huggingface.co/collections/z-
 
 **Gemma 4**
 
-| Model          | Checkpoint                                                                      |
-| -------------- | ------------------------------------------------------------------------------- |
-| gemma-4-31B-it | [`z-lab/gemma-4-31B-it-PARO`](https://huggingface.co/z-lab/gemma-4-31B-it-PARO) |
+| Model              | Checkpoint                                                                              |
+| ------------------ | --------------------------------------------------------------------------------------- |
+| gemma-4-31B-it     | [`z-lab/gemma-4-31B-it-PARO`](https://huggingface.co/z-lab/gemma-4-31B-it-PARO)         |
 | gemma-4-26B-A4B-it | [`z-lab/gemma-4-26B-A4B-it-PARO`](https://huggingface.co/z-lab/gemma-4-26B-A4B-it-PARO) |
-| gemma-4-E4B-it | [`z-lab/gemma-4-E4B-it-PARO`](https://huggingface.co/z-lab/gemma-4-E4B-it-PARO) |
-| gemma-4-E2B-it | [`z-lab/gemma-4-E2B-it-PARO`](https://huggingface.co/z-lab/gemma-4-E2B-it-PARO) |
+| gemma-4-E4B-it     | [`z-lab/gemma-4-E4B-it-PARO`](https://huggingface.co/z-lab/gemma-4-E4B-it-PARO)         |
+| gemma-4-E2B-it     | [`z-lab/gemma-4-E2B-it-PARO`](https://huggingface.co/z-lab/gemma-4-E2B-it-PARO)         |
 
 **Qwen3.6**
 
-| Model       | Checkpoint                                                                |
-| ----------- | ------------------------------------------------------------------------- |
-| Qwen3.6-27B | [`z-lab/Qwen3.6-27B-PARO`](https://huggingface.co/z-lab/Qwen3.6-27B-PARO) |
+| Model           | Checkpoint                                                                        |
+| --------------- | --------------------------------------------------------------------------------- |
+| Qwen3.6-27B     | [`z-lab/Qwen3.6-27B-PARO`](https://huggingface.co/z-lab/Qwen3.6-27B-PARO)         |
 | Qwen3.6-35B-A3B | [`z-lab/Qwen3.6-35B-A3B-PARO`](https://huggingface.co/z-lab/Qwen3.6-35B-A3B-PARO) |
 
 **Qwen3.5**
 
-| Model | Checkpoint |
-|---|---|
-| Qwen3.5-0.8B | [`z-lab/Qwen3.5-0.8B-PARO`](https://huggingface.co/z-lab/Qwen3.5-0.8B-PARO) |
-| Qwen3.5-2B | [`z-lab/Qwen3.5-2B-PARO`](https://huggingface.co/z-lab/Qwen3.5-2B-PARO) |
-| Qwen3.5-4B | [`z-lab/Qwen3.5-4B-PARO`](https://huggingface.co/z-lab/Qwen3.5-4B-PARO) |
-| Qwen3.5-9B | [`z-lab/Qwen3.5-9B-PARO`](https://huggingface.co/z-lab/Qwen3.5-9B-PARO) |
-| Qwen3.5-27B | [`z-lab/Qwen3.5-27B-PARO`](https://huggingface.co/z-lab/Qwen3.5-27B-PARO) |
+| Model           | Checkpoint                                                                        |
+| --------------- | --------------------------------------------------------------------------------- |
+| Qwen3.5-0.8B    | [`z-lab/Qwen3.5-0.8B-PARO`](https://huggingface.co/z-lab/Qwen3.5-0.8B-PARO)       |
+| Qwen3.5-2B      | [`z-lab/Qwen3.5-2B-PARO`](https://huggingface.co/z-lab/Qwen3.5-2B-PARO)           |
+| Qwen3.5-4B      | [`z-lab/Qwen3.5-4B-PARO`](https://huggingface.co/z-lab/Qwen3.5-4B-PARO)           |
+| Qwen3.5-9B      | [`z-lab/Qwen3.5-9B-PARO`](https://huggingface.co/z-lab/Qwen3.5-9B-PARO)           |
+| Qwen3.5-27B     | [`z-lab/Qwen3.5-27B-PARO`](https://huggingface.co/z-lab/Qwen3.5-27B-PARO)         |
 | Qwen3.5-35B-A3B | [`z-lab/Qwen3.5-35B-A3B-PARO`](https://huggingface.co/z-lab/Qwen3.5-35B-A3B-PARO) |
 
 **Qwen3**
 
-| Model | Checkpoint |
-|---|---|
+| Model      | Checkpoint                                                              |
+| ---------- | ----------------------------------------------------------------------- |
 | Qwen3-0.6B | [`z-lab/Qwen3-0.6B-PARO`](https://huggingface.co/z-lab/Qwen3-0.6B-PARO) |
 | Qwen3-1.7B | [`z-lab/Qwen3-1.7B-PARO`](https://huggingface.co/z-lab/Qwen3-1.7B-PARO) |
-| Qwen3-4B | [`z-lab/Qwen3-4B-PARO`](https://huggingface.co/z-lab/Qwen3-4B-PARO) |
-| Qwen3-8B | [`z-lab/Qwen3-8B-PARO`](https://huggingface.co/z-lab/Qwen3-8B-PARO) |
-| Qwen3-14B | [`z-lab/Qwen3-14B-PARO`](https://huggingface.co/z-lab/Qwen3-14B-PARO) |
+| Qwen3-4B   | [`z-lab/Qwen3-4B-PARO`](https://huggingface.co/z-lab/Qwen3-4B-PARO)     |
+| Qwen3-8B   | [`z-lab/Qwen3-8B-PARO`](https://huggingface.co/z-lab/Qwen3-8B-PARO)     |
+| Qwen3-14B  | [`z-lab/Qwen3-14B-PARO`](https://huggingface.co/z-lab/Qwen3-14B-PARO)   |
 
 **Llama**
 
-| Model | Checkpoint |
-|---|---|
-| Llama-2-7B | [`z-lab/Llama-2-7b-hf-PARO`](https://huggingface.co/z-lab/Llama-2-7b-hf-PARO) |
-| Llama-3-8B | [`z-lab/Meta-Llama-3-8B-PARO`](https://huggingface.co/z-lab/Meta-Llama-3-8B-PARO) |
+| Model                 | Checkpoint                                                                                    |
+| --------------------- | --------------------------------------------------------------------------------------------- |
+| Llama-2-7B            | [`z-lab/Llama-2-7b-hf-PARO`](https://huggingface.co/z-lab/Llama-2-7b-hf-PARO)                 |
+| Llama-3-8B            | [`z-lab/Meta-Llama-3-8B-PARO`](https://huggingface.co/z-lab/Meta-Llama-3-8B-PARO)             |
 | Llama-3.1-8B-Instruct | [`z-lab/Llama-3.1-8B-Instruct-PARO`](https://huggingface.co/z-lab/Llama-3.1-8B-Instruct-PARO) |
 
 Want a model that's not listed? [Open an issue](https://github.com/z-lab/paroquant/issues/new) and let us know.
@@ -148,13 +148,13 @@ python -m paroquant.cli.convert \
 
 ## Docker Images
 
-| Image | Purpose |
-|---|---|
-| `ghcr.io/z-lab/paroquant:chat` | Interactive chat |
+| Image                                | Purpose                      |
+| ------------------------------------ | ---------------------------- |
+| `ghcr.io/z-lab/paroquant:chat`       | Interactive chat             |
 | `ghcr.io/z-lab/paroquant:chat-cu129` | Interactive chat (CUDA 12.9) |
-| `ghcr.io/z-lab/paroquant:serve` | OpenAI-compatible API server |
-| `ghcr.io/z-lab/paroquant:latest` | Optimization & evaluation |
-| `ghcr.io/z-lab/paroquant:eval` | Reasoning task evaluation |
+| `ghcr.io/z-lab/paroquant:serve`      | OpenAI-compatible API server |
+| `ghcr.io/z-lab/paroquant:latest`     | Optimization & evaluation    |
+| `ghcr.io/z-lab/paroquant:eval`       | Reasoning task evaluation    |
 
 ## Citation
 

@@ -61,7 +61,7 @@ vllm serve {{ paro_model_path }} --port 8000
 For other frameworks:
 
 ```bash
-python -m paroquant.cli.serve --model {{ paro_model_path }} --port 8000
+vllm serve {{ paro_model_path }} --port 8000
 ```
 
 {% if pipeline_tag == "image-text-to-text" -%}
