@@ -11,9 +11,8 @@ from typing import Any
 import torch
 from tqdm import tqdm
 from transformers import AutoModelForCausalLM, AutoModelForImageTextToText
-from transformers.models.qwen3_5_moe.modeling_qwen3_5_moe import Qwen3_5MoeExperts
 
-from paroquant.optim.qexperts import PseudoQuantizedQwen3_5MoeExperts, get_named_qwen3_5_moe_experts
+from paroquant.optim.qexperts import PseudoQuantizedMoEExperts, get_named_moe_experts, is_fused_moe_experts
 from paroquant.optim.util import get_named_linears, set_module_by_name
 
 
@@ -214,7 +213,7 @@ def _convert_pseudo(model: torch.nn.Module, result_dir: Path) -> int:
         layer = layer.cuda()
         modules: dict[str, torch.nn.Module] = {}
         modules.update(get_named_linears(layer))
-        modules.update(get_named_qwen3_5_moe_experts(layer))
+        modules.update(get_named_moe_experts(layer))
 
         for name, module in modules.items():
             pt_file = result_dir / f"{layer_idx}.{name}.pt"
@@ -226,8 +225,8 @@ def _convert_pseudo(model: torch.nn.Module, result_dir: Path) -> int:
                 module.weight.data.copy_(qlinear.pseudo_weight())
                 if module.bias is not None and qlinear.bias is not None:
                     module.bias.data.copy_(qlinear.bias.data)
-            elif isinstance(module, Qwen3_5MoeExperts):
-                qexperts = PseudoQuantizedQwen3_5MoeExperts.from_state_dict(sd, module, "cuda")
+            elif is_fused_moe_experts(module):
+                qexperts = PseudoQuantizedMoEExperts.from_state_dict(sd, module, "cuda")
                 module.gate_up_proj.data.copy_(qexperts.gate_up_proj.data)
                 module.down_proj.data.copy_(qexperts.down_proj.data)
             else:
@@ -439,7 +438,7 @@ def _convert_real(
             set_module_by_name(layer, name, rl)
             count += 1
 
-        for name, module in get_named_qwen3_5_moe_experts(layer).items():
+        for name, module in get_named_moe_experts(layer).items():
             pt_file = result_dir / f"{layer_idx}.{name}.pt"
             if not pt_file.exists():
                 continue

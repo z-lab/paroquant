@@ -117,10 +117,9 @@ torch::Tensor rotate_dynamic(at::Tensor x, at::Tensor idx, at::Tensor theta,
   if (group_size == 128) {
     DISPATCH_KROT(128)
   }
-  // We also drop support for group_size=64 here to speed up compilation.
-  // if (group_size == 64) {
-  //   DISPATCH_KROT(64)
-  // }
+  if (group_size == 64) {
+    DISPATCH_KROT(64)
+  }
   TORCH_CHECK(false, "Unsupported group_size: ", group_size, "; expected 64 or 128");
 }
 

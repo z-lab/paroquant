@@ -11,11 +11,10 @@ import torch
 import torch.nn as nn
 import wandb
 from tqdm import tqdm
-from transformers.models.qwen3_5_moe.modeling_qwen3_5_moe import Qwen3_5MoeExperts
 
 from paroquant.optim.train import optimize_module, get_random_rotation_pairs
 from paroquant.optim.qlinear import PseudoQuantizedLinear
-from paroquant.optim.qexperts import PseudoQuantizedQwen3_5MoeExperts, get_named_qwen3_5_moe_experts
+from paroquant.optim.qexperts import PseudoQuantizedMoEExperts, get_named_moe_experts, is_fused_moe_experts
 from paroquant.optim.util import (
     set_module_by_name,
     load_model,
@@ -134,7 +133,7 @@ def main():
         json.dump(vars(args), f, indent=2)
 
     # Load model.
-    model = load_model(args.model, device_map="cpu", dtype=torch.float16)
+    model = load_model(args.model, device_map="cpu", dtype=torch.float16).half()
     move_embed(model, device)
     tokenizer = load_tokenizer(args.model)
     blocks = get_blocks(model)
@@ -212,7 +211,7 @@ def main():
             for key in RETAINED_KWARG_KEYS:
                 if key in retained_kwargs_batches[batch_idx]:
                     batch_kwargs[key] = to_device(retained_kwargs_batches[batch_idx][key], device)
-            output = layer(*(arg.to(device=device) for arg in args_batch), **batch_kwargs)
+            output = layer(*to_device(args_batch, device), **batch_kwargs)
             if isinstance(output, tuple):
                 output = output[0]
             if output.device != store_device:
@@ -233,12 +232,6 @@ def main():
         return [
             (input_batch, *other_args_batch) for input_batch, other_args_batch in zip(input_batches, other_args_batches)
         ]
-
-    def get_named_optim_modules(layer: nn.Module) -> dict[str, nn.Module]:
-        modules: dict[str, nn.Module] = {}
-        modules.update(get_named_linears(layer))
-        modules.update(get_named_qwen3_5_moe_experts(layer))
-        return modules
 
     def init_rotation_data(
         weight: torch.Tensor,
@@ -316,14 +309,18 @@ def main():
         train_args_batches = CachedTensorShards(train_args_batches, args.cache_shards, target_device=device)
         train_output_batches = CachedTensorShards(train_output_batches, args.cache_shards, target_device=device)
 
-        val_args_batches = [tuple(arg.to(device) for arg in args_batch) for args_batch in layer_val_args_batches]
+        val_args_batches = [to_device(args_batch, device) for args_batch in layer_val_args_batches]
         val_output_batches = [b.to(device) for b in og_layer_val_output_batches]
 
         # Freeze all parameters
         for param in layer.parameters():
             param.requires_grad = False
 
-        optim_modules = get_named_optim_modules(layer)
+        linear_modules = get_named_linears(layer)
+        expert_modules = get_named_moe_experts(layer)
+        optim_modules: dict[str, nn.Module] = {}
+        optim_modules.update(linear_modules)
+        optim_modules.update(expert_modules)
         if args.resume:
             all_files_exist = True
             for name in optim_modules.keys():
@@ -338,10 +335,14 @@ def main():
         if not all_files_exist:
             logger.info(f"Initializing rotation parameters...")
 
-        modules_names_to_optimize = [name for name in optim_modules.keys() if name not in args.skipped_modules]
-        skipped_module_names = [name for name in optim_modules.keys() if name in args.skipped_modules]
-        logger.info(f"Modules to optimize: {modules_names_to_optimize}")
-        logger.info(f"Skipped modules: {skipped_module_names}")
+        linear_names_to_optimize = [name for name in linear_modules.keys() if name not in args.skipped_modules]
+        expert_names_to_optimize = [name for name in expert_modules.keys() if name not in args.skipped_modules]
+        skipped_linear_names = [name for name in linear_modules.keys() if name in args.skipped_modules]
+        skipped_expert_names = [name for name in expert_modules.keys() if name in args.skipped_modules]
+        logger.info(f"Linear modules to optimize: {linear_names_to_optimize}")
+        logger.info(f"MoE expert modules to optimize: {expert_names_to_optimize}")
+        logger.info(f"Skipped linear modules: {skipped_linear_names}")
+        logger.info(f"Skipped MoE expert modules: {skipped_expert_names}")
 
         named_pseudo_modules: dict[str, nn.Module] = {}
         for name, old_module in optim_modules.items():
@@ -354,8 +355,8 @@ def main():
                 if isinstance(old_module, nn.Linear):
                     new_module = PseudoQuantizedLinear.from_state_dict(sd)
                     set_module_by_name(layer, name, new_module)
-                elif isinstance(old_module, Qwen3_5MoeExperts):
-                    new_module = PseudoQuantizedQwen3_5MoeExperts.from_state_dict(sd, old_module, device)
+                elif is_fused_moe_experts(old_module):
+                    new_module = PseudoQuantizedMoEExperts.from_state_dict(sd, old_module, device)
                     set_module_by_name(layer, name, new_module)
                 else:
                     raise NotImplementedError(f"Unsupported module type: {type(old_module)}")
@@ -382,7 +383,7 @@ def main():
                     num_rotations=args.num_rotations,
                 )
                 set_module_by_name(layer, name, new_module)
-            elif isinstance(old_module, Qwen3_5MoeExperts):
+            elif is_fused_moe_experts(old_module):
                 gate_up = old_module.gate_up_proj.float().view(-1, old_module.gate_up_proj.shape[-1])
                 down = old_module.down_proj.float().view(-1, old_module.down_proj.shape[-1])
                 gate_up_rotation_pairs = init_rotation_data(
@@ -410,7 +411,7 @@ def main():
                     device=device,
                 )
 
-                new_module = PseudoQuantizedQwen3_5MoeExperts(
+                new_module = PseudoQuantizedMoEExperts(
                     old_module,
                     gate_up_rotation_pairs,
                     down_rotation_pairs,
