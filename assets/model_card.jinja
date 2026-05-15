@@ -7,6 +7,8 @@ license: {{ license }}
 {% if pipeline_tag -%} pipeline_tag: {{ pipeline_tag }} {%- endif %}
 base_model:
 - {{ base_model }}
+tags:
+  - mlx
 ---
 
 # {{ paro_model_path }}
@@ -50,18 +52,29 @@ python -m paroquant.cli.chat --model {{ paro_model_path }}
 
 ### OpenAI-Compatible API Server
 
+For vLLM, you can directly use `vllm serve` to serve ParoQuant models:
+
+```bash
+vllm serve {{ paro_model_path }} --port 8000
+```
+
+For other frameworks:
+
 ```bash
 python -m paroquant.cli.serve --model {{ paro_model_path }} --port 8000
 ```
 
-For vLLM, the arguments are passed to the vLLM server directly. See [vLLM docs](https://docs.vllm.ai/en/latest/configuration/serve_args/) for more details.
-
+{% if pipeline_tag == "image-text-to-text" -%}
 For MLX, add `--vlm` if you wish to load the VLM components and use the model's multimodal features. For vLLM, VLM components are loaded by default and can be skipped with the server argument `--language-model-only`.
+
+> [!NOTE]
+> The visual components in this checkpoint is stored in original precision, and only the language components are quantized to 4 bits; as a result, the model size is larger than a fully-quantized model. Avoid loading the VLM components if you are not using the multimodal features for the best efficiency.
+{%- endif %}
 
 ### Docker (NVIDIA GPU)
 
 > [!NOTE]
-> The following commands map the local cache directory to the container in order to persist kernel cache across runs. Remove `-v ...` to disable this behaviour.
+> The following commands map the local cache directory to the container in order to persist kernel cache across runs. Remove `-v ...` to disable this behavior.
 
 ```bash
 # Interactive chat
