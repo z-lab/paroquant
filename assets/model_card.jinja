@@ -55,13 +55,13 @@ python -m paroquant.cli.chat --model {{ paro_model_path }}
 For vLLM, you can directly use `vllm serve` to serve ParoQuant models:
 
 ```bash
-vllm serve $MODEL --port 8000
+vllm serve {{ paro_model_path }} --port 8000
 ```
 
 For other frameworks:
 
 ```bash
-python -m paroquant.cli.serve --model $MODEL --port 8000
+vllm serve {{ paro_model_path }} --port 8000
 ```
 
 {% if pipeline_tag == "image-text-to-text" -%}
@@ -74,7 +74,7 @@ For MLX, add `--vlm` if you wish to load the VLM components and use the model's 
 ### Docker (NVIDIA GPU)
 
 > [!NOTE]
-> The following commands map the local cache directory to the container in order to persist kernel cache across runs. Remove `-v ...` to disable this behaviour.
+> The following commands map the local cache directory to the container in order to persist kernel cache across runs. Remove `-v ...` to disable this behavior.
 
 ```bash
 # Interactive chat
