@@ -314,6 +314,7 @@ def _is_io_layer(path, module):
 def load(model_path: str, lazy: bool = False, force_text: bool = False) -> tuple:
     """Load a ParoQuant model for MLX. Returns (model, processor, is_vlm)."""
     from huggingface_hub import snapshot_download
+    import hashlib
 
     local_dir = Path(model_path)
     if not local_dir.is_dir():
@@ -329,26 +330,96 @@ def load(model_path: str, lazy: bool = False, force_text: bool = False) -> tuple
     group_size = int(paro.get("group_size", 128))
     bits = int(paro.get("bits", 4))
 
+    # 1. First, check if the pre-converted weights are placed directly in the model directory
+    model_dir_cache_file = local_dir / "converted_mlx.safetensors"
     weights = {}
-    for sf in sorted(local_dir.glob("*.safetensors")):
-        weights.update(mx.load(str(sf)))
+    cache_loaded = False
+
+    if model_dir_cache_file.exists():
+        try:
+            logger.info("Loading pre-converted MLX weights directly from model directory: %s", model_dir_cache_file)
+            weights = mx.load(str(model_dir_cache_file))
+            cache_loaded = True
+        except Exception as e:
+            logger.warning("Failed to load converted MLX weights from model directory (%s).", e)
+
+    # 2. If not found in the model directory, check the global user cache
+    if not cache_loaded:
+        # Calculate cache hash to uniquely identify this snapshot & commit
+        hasher = hashlib.sha256()
+        hasher.update(str(local_dir.resolve()).encode("utf-8"))
+        safetensors_files = sorted(local_dir.glob("*.safetensors"))
+        for sf in safetensors_files:
+            hasher.update(sf.name.encode("utf-8"))
+            try:
+                stat = sf.stat()
+                hasher.update(str(stat.st_size).encode("utf-8"))
+                hasher.update(str(stat.st_mtime).encode("utf-8"))
+            except Exception:
+                pass
+        model_hash = hasher.hexdigest()[:16]
+
+        cache_dir = Path.home() / ".cache" / "paroquant" / "mlx_cache" / model_hash
+        cache_file = cache_dir / "converted_mlx.safetensors"
+
+        if cache_file.exists():
+            try:
+                logger.info("Loading pre-converted MLX weights from cache: %s", cache_file)
+                weights = mx.load(str(cache_file))
+                cache_loaded = True
+
+                # Check if original safetensors still exist in model directory to suggest replacing them
+                original_sfs = [sf for sf in safetensors_files if sf.name != "converted_mlx.safetensors"]
+                if original_sfs:
+                    print("\n" + "="*80)
+                    print("[ParoQuant MLX Space Saving Tip]")
+                    print("You are loading converted weights from the global cache, but the original model files")
+                    print("are still taking up space in the model directory.")
+                    print("To save disk space and avoid double storage, it is highly recommended to:")
+                    print(f"  1. Move the cached file: {cache_file}")
+                    print(f"     to the model folder: {local_dir}")
+                    print(f"  2. Delete the original safetensors: {[sf.name for sf in original_sfs]}")
+                    print("="*80 + "\n")
+            except Exception as e:
+                logger.warning("Failed to load cached MLX weights (%s). Re-converting...", e)
+
+        if not cache_loaded:
+            for sf in safetensors_files:
+                weights.update(mx.load(str(sf)))
 
     has_vision = any(k.startswith(("vision_tower.", "model.visual.", "visual.")) for k in weights)
     is_vlm = "vision_config" in config and not force_text and has_vision
 
     model = _create_model(config, is_vlm)
 
-    if any(k.endswith(".qlinear.qweight") for k in weights):
-        weights = _convert_paro_native(weights, group_size, bits)
-    elif any(k.endswith(".qweight") for k in weights):
-        weights = _convert_autoawq(weights, group_size)
-    if hasattr(model, "sanitize"):
-        weights = model.sanitize(weights)
-    if is_vlm and hasattr(model, "vision_tower") and hasattr(model.vision_tower, "sanitize"):
-        weights = model.vision_tower.sanitize(weights)
+    if not cache_loaded:
+        if any(k.endswith(".qlinear.qweight") for k in weights):
+            weights = _convert_paro_native(weights, group_size, bits)
+        elif any(k.endswith(".qweight") for k in weights):
+            weights = _convert_autoawq(weights, group_size)
+        if hasattr(model, "sanitize"):
+            weights = model.sanitize(weights)
+        if is_vlm and hasattr(model, "vision_tower") and hasattr(model.vision_tower, "sanitize"):
+            weights = model.vision_tower.sanitize(weights)
 
-    weights = _stack_moe_expert_weights(weights)
-    weights = _remap_shared_moe_rotation(weights)
+        weights = _stack_moe_expert_weights(weights)
+        weights = _remap_shared_moe_rotation(weights)
+
+        # Save to cache
+        try:
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            logger.info("Caching converted MLX weights to: %s", cache_file)
+            mx.save_safetensors(str(cache_file), weights)
+            print("\n" + "="*80)
+            print("[ParoQuant MLX Cache Guide] First-time model conversion and caching completed!")
+            print("To save disk space and avoid double storage, please move the cached weight file to the original model folder:")
+            print(f"  * Cached File: {cache_file}")
+            print(f"  * Model Folder: {local_dir}")
+            print("  👉 After moving the cache file, you can safely delete the original weight files (model*.safetensors).")
+            print("="*80 + "\n")
+        except Exception as e:
+            logger.warning("Failed to cache converted MLX weights: %s", e)
+
     _patch_quantized_layers(model, weights, bits, group_size)
     model.load_weights(list(weights.items()), strict=False)
     mlx_nn.quantize(model, group_size, bits, mode="affine", class_predicate=_is_io_layer)
