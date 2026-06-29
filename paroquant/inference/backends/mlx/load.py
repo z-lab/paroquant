@@ -178,6 +178,37 @@ def _remap_shared_moe_rotation(weights: dict) -> dict:
     return weights
 
 
+def _align_moe_to_model(weights: dict, model) -> dict:
+    """Rename stacked MoE keys onto the model's actual MoE module path.
+
+    ``_stack_moe_expert_weights``/``_remap_shared_moe_rotation`` emit keys under a
+    ``switch_mlp`` namespace (the Qwen convention). Architectures that name the MoE
+    module differently — e.g. gemma-4 uses ``experts.switch_glu`` — would otherwise
+    never match a module: ``load_weights(strict=False)`` silently drops the stacked
+    quantized weights, leaving the experts as their unquantized float32 init (which
+    blows peak memory ~4x, e.g. 16GB -> >90GB for gemma-4-26B-A4B). Remap each
+    ``<base>.switch_mlp.<rest>`` key onto the SwitchGLU path under ``<base>``. No-op
+    when the model already uses ``switch_mlp``.
+    """
+    sg_paths = [p for p, mod in model.named_modules() if type(mod).__name__ == "SwitchGLU"]
+    if not sg_paths:
+        return weights
+
+    marker = ".switch_mlp."
+    for key in list(weights):
+        i = key.find(marker)
+        if i < 0:
+            continue
+        base = key[:i]
+        if f"{base}.switch_mlp" in sg_paths:
+            continue  # model already uses switch_mlp (e.g. Qwen)
+        target = next((p for p in sg_paths if p.startswith(base + ".")), None)
+        if target is None:
+            continue
+        weights[f"{target}.{key[i + len(marker):]}"] = weights.pop(key)
+    return weights
+
+
 def _create_model(config: dict, is_vlm: bool):
     """Instantiate model from config, dispatching to mlx_vlm or mlx_lm."""
     if is_vlm:
@@ -349,6 +380,7 @@ def load(model_path: str, lazy: bool = False, force_text: bool = False) -> tuple
 
     weights = _stack_moe_expert_weights(weights)
     weights = _remap_shared_moe_rotation(weights)
+    weights = _align_moe_to_model(weights, model)
     _patch_quantized_layers(model, weights, bits, group_size)
     model.load_weights(list(weights.items()), strict=False)
     mlx_nn.quantize(model, group_size, bits, mode="affine", class_predicate=_is_io_layer)
