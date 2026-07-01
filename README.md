@@ -13,6 +13,11 @@ State-of-the-art INT4 quantization for LLMs. ParoQuant uses learned pairwise rot
 
 ## Quick Start
 
+### oMLX (Apple Silicon)
+
+On Apple Silicon, we recommend serving ParoQuant models using [oMLX](https://github.com/jundot/omlx). Refer to the [docs](https://omlx.ai) for more details.
+
+
 ### Installation
 
 ```bash
