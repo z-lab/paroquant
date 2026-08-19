@@ -82,6 +82,12 @@ docker run --pull=always --rm -it --gpus all --ipc=host -p 8000:8000 \
 
 All models are available on [Hugging Face](https://huggingface.co/collections/z-lab/paroquant). Swap the model name in the commands above to try any of them.
 
+**Qwen3.8**
+
+| Model       | Checkpoint                                                                |
+| ----------- | ------------------------------------------------------------------------- |
+| Qwen3.8-27B | [`z-lab/Qwen3.8-27B-PARO`](https://huggingface.co/z-lab/Qwen3.8-27B-PARO) |
+
 **Gemma 4**
 
 | Model              | Checkpoint                                                                              |
