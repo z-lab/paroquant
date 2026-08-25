@@ -31,7 +31,7 @@ transformers = [
     "ninja",
 ]
 vllm = [
-    "vllm>=0.19.1,<0.20",
+    "vllm>=0.25.1,<0.26",
     "accelerate",
 ]
 mlx = [

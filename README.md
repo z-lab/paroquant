@@ -25,8 +25,8 @@ On Apple Silicon, we recommend serving ParoQuant models using [oMLX](https://git
 pip install "paroquant[vllm]"
 
 # NVIDIA GPU (CUDA 13.0)
-pip install "paroquant[vllm]" "vllm==0.19.1" \
-  --extra-index-url https://wheels.vllm.ai/0.19.1/cu130 \
+pip install "paroquant[vllm]" "vllm==0.25.1" \
+  --extra-index-url https://wheels.vllm.ai/0.25.1/cu130 \
   --extra-index-url https://download.pytorch.org/whl/cu130
 
 # Apple Silicon

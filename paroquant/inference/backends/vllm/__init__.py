@@ -1,9 +1,18 @@
-from .generator import VllmGenerator
+from __future__ import annotations
 
-__all__ = ["VllmGenerator"]
+from typing import Any
+
+__all__ = ["VllmGenerator", "register"]
+
+
+def __getattr__(name: str) -> Any:
+    if name == "VllmGenerator":
+        from .generator import VllmGenerator
+
+        return VllmGenerator
+    raise AttributeError(name)
 
 
 def register() -> None:
     """vLLM general-plugin entry point. Idempotent."""
-    import paroquant.kernels.cuda  # noqa: F401 — registers torch.ops.rotation.rotate
     import paroquant.inference.backends.vllm.plugin  # noqa: F401 — registers ParoQuantConfig
