@@ -47,7 +47,7 @@ def _serve_mlx():
             i += 1
             continue
         if arg == "--llm-only":
-            # For backward compatability.
+            # For backward compatibility.
             llm_only = True
             i += 1
             continue
