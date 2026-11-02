@@ -17,7 +17,8 @@ from transformers.quantizers.auto import (
 from transformers.quantizers.base import HfQuantizer
 from transformers.utils.quantization_config import QuantizationConfigMixin
 
-import paroquant.kernels.cuda  # noqa: F401 — registers torch.ops.rotation.rotate
+if torch.cuda.is_available():
+    import paroquant.kernels.cuda  # noqa: F401
 
 from .modules import RotateQuantizedLinear
 
@@ -76,8 +77,9 @@ class ParoQuantHfQuantizer(HfQuantizer):
     requires_calibration = True
 
     def validate_environment(self, **kwargs):
-        if not torch.cuda.is_available():
-            raise RuntimeError("ParoQuant requires CUDA.")
+        has_npu = hasattr(torch, "npu") and torch.npu.is_available()
+        if not torch.cuda.is_available() and not has_npu:
+            raise RuntimeError("ParoQuant requires CUDA or Ascend NPU.")
 
     def update_dtype(self, dtype):
         if dtype != torch.float16:
@@ -117,6 +119,9 @@ class ParoQuantHfQuantizer(HfQuantizer):
     @property
     def is_trainable(self) -> bool:
         return False
+
+    def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
+        return model
 
     def is_serializable(self) -> bool:
         return True
