@@ -18,15 +18,15 @@ _LOAD_KWARGS = dict(
     torch_dtype=torch.float16,
     low_cpu_mem_usage=True,
     attn_implementation="sdpa",
-    device_map="cuda",
 )
 
 
 @torch.no_grad()
 def _load_model(path: str):
+    device = "npu" if hasattr(torch, "npu") and torch.npu.is_available() else "cuda"
     for auto_cls in (AutoModelForImageTextToText, AutoModelForCausalLM):
         try:
-            model = auto_cls.from_pretrained(path, **_LOAD_KWARGS)
+            model = auto_cls.from_pretrained(path, device_map=device, **_LOAD_KWARGS)
             model.eval()
             return model
         except (ValueError, KeyError):
