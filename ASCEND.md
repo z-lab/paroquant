@@ -32,6 +32,9 @@ model = AutoModelForCausalLM.from_pretrained(
     device_map="npu", attn_implementation="sdpa").eval()
 ```
 
+Measured records and every GSM8K numeric prediction are available in
+[`experiments/ascend_results.json`](experiments/ascend_results.json).
+
 ## Measured performance
 
 Three independent processes measure each model, mode, and input length on one
@@ -81,6 +84,28 @@ and 64 cover vector and matrix paths; the largest native relative L2 error is
 explicit FP16 weights and unfused rotations: 252 layers per model, maximum
 relative L2 errors 0.001092 (4B) and 0.002660 (8B). The 216 measured operator
 cases have maximum relative L2 error 0.001028.
+
+## Model quality
+
+All six configurations evaluate the same full WikiText-2 raw test sequence
+(299,077 next-token targets) and all 1319 GSM8K test questions. GSM8K uses
+greedy non-thinking decoding, batches of eight, and at most 512 new tokens.
+Each row reports the complete result; concurrent quality-job timings are not
+used as performance evidence.
+
+| Model | Execution | WikiText-2 perplexity | GSM8K correct / 1319 | GSM8K accuracy |
+|---|---|---:|---:|---:|
+| 4B | Packed INT4 + fused | 13.858716 | 1181 | 89.54% |
+| 4B | Dense FP16 + fused | 13.859074 | 1185 | 89.84% |
+| 4B | Original BF16 | 13.665473 | 1194 | 90.52% |
+| 8B | Packed INT4 + fused | 9.881995 | 1149 | 87.11% |
+| 8B | Dense FP16 + fused | 9.882060 | 1147 | 86.96% |
+| 8B | Original BF16 | 9.728429 | 1152 | 87.34% |
+
+Native and dense execution use identical learned PARO weights and rotations.
+Their perplexities differ by less than 0.00036. The original BF16 checkpoints
+have lower perplexity. GSM8K results use the stated 512-token non-thinking
+protocol; the table separates execution effects from checkpoint quantization.
 
 ## Reproduction
 
