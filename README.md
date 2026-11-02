@@ -11,6 +11,8 @@
 
 State-of-the-art INT4 quantization for LLMs. ParoQuant uses learned pairwise rotations to suppress weight outliers, closing the accuracy gap with FP16 while running at near-AWQ speed. Supports NVIDIA GPUs (vLLM, Transformers) and Apple Silicon (MLX).
 
+Ascend NPU inference through the Transformers backend is documented in [ASCEND.md](ASCEND.md).
+
 ## Quick Start
 
 ### oMLX (Apple Silicon)
