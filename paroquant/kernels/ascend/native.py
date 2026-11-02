@@ -1,4 +1,5 @@
 """Convert the published AWQ packing for Ascend's native W4A16 operator."""
+
 import torch
 import torch_npu
 import triton
@@ -40,6 +41,11 @@ def native_linear(x, prepared, scales, group_size=128, bias=None):
     shape = x.shape
     weight, offset = prepared
     output = torch_npu.npu_weight_quant_batchmatmul(
-        x.reshape(-1, shape[-1]), weight, scales, offset, bias=bias,
-        antiquant_group_size=group_size if shape[-1] > group_size else 0)
+        x.reshape(-1, shape[-1]),
+        weight,
+        scales,
+        offset,
+        bias=bias,
+        antiquant_group_size=group_size if shape[-1] > group_size else 0,
+    )
     return output.view(*shape[:-1], scales.shape[1])

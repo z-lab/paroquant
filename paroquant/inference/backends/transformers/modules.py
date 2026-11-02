@@ -10,6 +10,7 @@ import transformers.activations as _act
 if not hasattr(_act, "PytorchGELUTanh"):
     _act.PytorchGELUTanh = _act.GELUActivation
 
+
 class RotateQuantizedLinear(nn.Module):
     """Pairwise Givens rotation + INT4 quantized matmul.
 
@@ -68,10 +69,10 @@ class RotateQuantizedLinear(nn.Module):
                     self.pairs, self.theta, self.group_size
                 )
                 self._ascend_weight, self._ascend_offset = prepare_native(self.qweight, self.qzeros)
-            x = rotate(x, self.channel_scales,
-                       (self._ascend_partner, self._ascend_cos, self._ascend_sin), self.group_size)
-            return native_linear(x, (self._ascend_weight, self._ascend_offset),
-                                 self.scales, self.group_size, self.bias)
+            x = rotate(
+                x, self.channel_scales, (self._ascend_partner, self._ascend_cos, self._ascend_sin), self.group_size
+            )
+            return native_linear(x, (self._ascend_weight, self._ascend_offset), self.scales, self.group_size, self.bias)
 
         from awq.modules.linear.gemm import WQLinearMMFunction
 

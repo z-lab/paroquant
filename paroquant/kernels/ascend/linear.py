@@ -25,8 +25,9 @@ def prepare_rotation(pairs, theta, group_size=128):
 
 
 @triton.jit
-def _rotate(X, Scale, Partner, Cos, Sin, Y, M: tl.constexpr, H: tl.constexpr,
-            R: tl.constexpr, G: tl.constexpr, BM: tl.constexpr):
+def _rotate(
+    X, Scale, Partner, Cos, Sin, Y, M: tl.constexpr, H: tl.constexpr, R: tl.constexpr, G: tl.constexpr, BM: tl.constexpr
+):
     row = tl.program_id(0) * BM + tl.arange(0, BM)
     group = tl.program_id(1)
     d = tl.arange(0, G)
@@ -54,13 +55,13 @@ def rotate(x, channel_scales, prepared, group_size=128):
     out = torch.empty_like(x)
     bm = 1 if m < 8 else 8
     _rotate[(triton.cdiv(m, bm), h // group_size)](
-        x, channel_scales, partner, cos, sin, out, m, h, partner.shape[0], group_size, bm)
+        x, channel_scales, partner, cos, sin, out, m, h, partner.shape[0], group_size, bm
+    )
     return out.view(shape)
 
 
 @triton.jit
-def _unpack(Q, Z, S, kb, nb, K: tl.constexpr, N: tl.constexpr,
-            G: tl.constexpr, BK: tl.constexpr, BN: tl.constexpr):
+def _unpack(Q, Z, S, kb, nb, K: tl.constexpr, N: tl.constexpr, G: tl.constexpr, BK: tl.constexpr, BN: tl.constexpr):
     k = kb + tl.arange(0, BK)
     packed_n = nb // 8 + tl.arange(0, BN // 8)
     lane = tl.arange(0, 8)
@@ -76,24 +77,46 @@ def _unpack(Q, Z, S, kb, nb, K: tl.constexpr, N: tl.constexpr,
 
 
 @triton.jit
-def _matmul(X, Q, Z, S, Y, M: tl.constexpr, K: tl.constexpr, N: tl.constexpr,
-            G: tl.constexpr, BM: tl.constexpr, BN: tl.constexpr, BK: tl.constexpr):
+def _matmul(
+    X,
+    Q,
+    Z,
+    S,
+    Y,
+    M: tl.constexpr,
+    K: tl.constexpr,
+    N: tl.constexpr,
+    G: tl.constexpr,
+    BM: tl.constexpr,
+    BN: tl.constexpr,
+    BK: tl.constexpr,
+):
     row = tl.program_id(0) * BM + tl.arange(0, BM)
     nb = tl.program_id(1) * BN
     n = nb + tl.arange(0, BN)
     acc = tl.zeros((BM, BN), tl.float32)
     for kb in range(0, K, BK):
         k = kb + tl.arange(0, BK)
-        x = tl.load(X + row[:, None] * K + k[None, :],
-                    (row[:, None] < M) & (k[None, :] < K), 0)
+        x = tl.load(X + row[:, None] * K + k[None, :], (row[:, None] < M) & (k[None, :] < K), 0)
         weight = _unpack(Q, Z, S, kb, nb, K, N, G, BK, BN)
         acc = tl.dot(x, weight, acc)
     tl.store(Y + row[:, None] * N + n[None, :], acc, row[:, None] < M)
 
 
 @triton.jit
-def _gemv(X, Q, Z, S, Y, M: tl.constexpr, K: tl.constexpr, N: tl.constexpr,
-           G: tl.constexpr, BN: tl.constexpr, BK: tl.constexpr):
+def _gemv(
+    X,
+    Q,
+    Z,
+    S,
+    Y,
+    M: tl.constexpr,
+    K: tl.constexpr,
+    N: tl.constexpr,
+    G: tl.constexpr,
+    BN: tl.constexpr,
+    BK: tl.constexpr,
+):
     row = tl.program_id(0)
     nb = tl.program_id(1) * BN
     n = nb + tl.arange(0, BN)
@@ -118,8 +141,7 @@ def linear(x, qweight, qzeros, scales, group_size=128, bias=None):
     if m <= 4:
         _gemv[(m, n // 16)](x, qweight, qzeros, scales, out, m, k, n, group_size, 16, 128)
     else:
-        _matmul[(triton.cdiv(m, 16), n // 64)](
-            x, qweight, qzeros, scales, out, m, k, n, group_size, 16, 64, 32)
+        _matmul[(triton.cdiv(m, 16), n // 64)](x, qweight, qzeros, scales, out, m, k, n, group_size, 16, 64, 32)
     if bias is not None:
         out = out + bias
     return out.view(*shape[:-1], n)
